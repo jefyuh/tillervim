@@ -1,0 +1,227 @@
+-- Guards the agent panel's input rules (local-plugin/agent-workbench.nvim/lua/agent_workbench/terminal.lua).
+--
+-- Both were silent losses rather than errors, which is why they survived so
+-- long: a click inside the panel left Terminal-mode, so returning to the window
+-- manager and clicking back put the panel in Normal mode; and a quick double
+-- Esc -- the agents' own "go back a message" -- was eaten by Snacks and by the
+-- global <Esc><Esc> before either agent could see it.
+local t = dofile("tests/helper.lua")
+
+local config = require("agent_workbench.state")
+local ai_term = require("agent_workbench.terminal")
+
+-- A stand-in for the real CLI: identity is decided by the command's basename,
+-- so a script named after the provider is indistinguishable from the agent as
+-- far as ai.state.is_native_command is concerned -- and it will not try to
+-- reach the network or a real session.
+local bin = vim.fn.tempname() .. "/" .. config.agents[config.agent_names()[1]].command
+vim.fn.mkdir(vim.fn.fnamemodify(bin, ":h"), "p")
+vim.fn.writefile({ "#!/bin/sh", "exec cat" }, bin)
+vim.fn.setfperm(bin, "rwx------")
+
+---@param cmd string[]
+---@return integer buf
+local function open_panel(cmd)
+  local term = require("snacks").terminal.open(cmd, {
+    auto_insert = true,
+    start_insert = true,
+    win = { position = "right", width = 0.4, keys = { term_normal = false },
+      on_buf = function(win)
+        vim.b[win.buf].agent_workbench = { id = "native:codex", kind = "codex", cmd = cmd, cwd = vim.fn.getcwd() }
+      end,
+    },
+  })
+  vim.wait(2000, function() return vim.bo[term.buf].buftype == "terminal" end)
+  return term.buf
+end
+
+---tmux leaves its socket file behind when a server exits, so a spec that
+---started one removes the file too, or every run adds one to /tmp/tmux-*/.
+---@param socket string
+local function remove_socket(socket)
+  local dir = (vim.env.TMUX_TMPDIR and vim.env.TMUX_TMPDIR ~= "") and vim.env.TMUX_TMPDIR or "/tmp"
+  for _, path in ipairs(vim.fn.glob(dir .. "/tmux-*/" .. socket, false, true)) do
+    vim.fn.delete(path)
+  end
+end
+
+---Is `lhs` mapped in Terminal-mode, and is that mapping buffer-local?
+local function buffer_local(lhs)
+  local m = vim.fn.maparg(lhs, "t", false, true)
+  return next(m) ~= nil and m.buffer == 1
+end
+
+---The same question for Normal mode, where the scrollback forwarding lives.
+local function buffer_local_n(lhs)
+  local m = vim.fn.maparg(lhs, "n", false, true)
+  return next(m) ~= nil and m.buffer == 1
+end
+
+-- Unwrapped panel: Nvim itself sees the click, so it needs the guard.
+local plain = open_panel({ bin })
+t.ok(ai_term.is_agent_buf(plain), "the fake agent reads as an agent buffer")
+t.eq(vim.fn.maparg("<Esc>", "t", false, true).buffer, 1,
+  "Esc is buffer-local on the panel, so it reaches the agent instead of <Esc><Esc>")
+t.ok(buffer_local("<LeftMouse>"),
+  "an unwrapped panel guards the mouse, so a click inside it keeps Terminal-mode")
+t.ok(not buffer_local_n("<PageUp>"),
+  "an unwrapped panel leaves scrolling to Nvim, which owns the scrollback there")
+
+-- Leaving Terminal-mode still has two documented keys; only the Esc pair moved.
+t.eq(vim.fn.maparg("jk", "t", false, true).buffer, 0, "jk still leaves Terminal-mode")
+t.eq(vim.fn.maparg("<C-\\>", "t", false, true).buffer, 0, "<C-\\> still leaves Terminal-mode")
+
+-- Wrapped panel: tmux turns mouse reporting on, Nvim forwards the click and
+-- never leaves Terminal-mode on its own. Mapping there would take the click
+-- away from tmux's copy-mode instead of fixing anything.
+if vim.fn.executable("tmux") == 1 then
+  local wrapped = open_panel({
+    "tmux", "-f", "/dev/null", "-L", "nvim-spec-" .. vim.fn.getpid(),
+    "set-option", "-g", "mouse", "on", ";",
+    "new-session", "-A", "-s", "main", bin,
+  })
+  t.eq(vim.fn.maparg("<Esc>", "t", false, true).buffer, 1,
+    "a wrapped panel still passes Esc through to the agent")
+  t.ok(not buffer_local("<LeftMouse>"), "a wrapped panel leaves the mouse to tmux")
+  -- Nvim's scrollback is one composed screenful when tmux owns the history, so
+  -- a scroll from terminal-Normal mode has to go into the pane instead.
+  for _, lhs in ipairs({ "<PageUp>", "<PageDown>", "<ScrollWheelUp>", "<C-u>", "<C-d>" }) do
+    t.ok(buffer_local_n(lhs), "a wrapped panel forwards " .. lhs .. " into tmux history")
+  end
+
+  local socket = "nvim-spec-" .. vim.fn.getpid()
+  local tmux = function(...)
+    local command = { "tmux", "-L", socket }
+    vim.list_extend(command, { ... })
+    return vim.system(command, { text = true }):wait()
+  end
+  local pane_in_mode = function()
+    return vim.trim(tmux("display-message", "-p", "-t", "main:", "#{pane_in_mode}").stdout or "")
+  end
+
+  -- The session answers before its pane does: on tmux 3.4 (CI) copy-mode
+  -- failed and #{pane_in_mode} was empty for ~25 ms after #{session_name}
+  -- was there. Wait for the pane, and the client, the next steps use.
+  t.ok(vim.wait(2000, function()
+    return pane_in_mode() == "0" and vim.trim(tmux("list-clients", "-t", "main").stdout or "") ~= ""
+  end, 10), "the wrapped tmux server is ready")
+  t.eq(tmux("copy-mode", "-u", "-t", "main:").code, 0,
+    "the wrapped panel can enter tmux copy-mode")
+  t.eq(pane_in_mode(), "1", "tmux reports that scrollback is active")
+  vim.b[wrapped].ai_preserve_scrollback_once = true
+  vim.api.nvim_exec_autocmds("TermEnter", { buffer = wrapped, modeline = false })
+  t.eq(pane_in_mode(), "1", "the scroll-forwarding TermEnter preserves copy-mode once")
+  vim.api.nvim_exec_autocmds("TermEnter", { buffer = wrapped, modeline = false })
+  t.ok(vim.wait(1000, function() return pane_in_mode() == "0" end, 10),
+    "manually resuming terminal input returns tmux to the live bottom")
+  vim.fn.jobstop(vim.bo[wrapped].channel)
+  -- jobstop only detaches the client; the server and its cat pane would
+  -- outlive the run otherwise (39 of them had piled up under /tmp/tmux-*/).
+  tmux("kill-server")
+  remove_socket(socket)
+end
+
+-- The native Codex wrapper preserves modified Enter through tmux's CSI u
+-- forwarding, independently of the host's editable provider declarations.
+if vim.fn.executable("tmux") == 1 then
+  local joined = table.concat(require("agent_workbench.backend.codex")._terminal_command({ "codex" }), " ")
+  t.ok(joined:find("extended-keys always", 1, true), "Codex preserves modified Enter")
+  t.ok(joined:find("extended-keys-format csi-u", 1, true), "tmux emits CSI u for Codex")
+end
+
+-- A failing agent must not take its own error message down with it. The tmux
+-- wrapper's teardown reports success to nvim whatever the pane's command did,
+-- so without the launcher a startup failure is indistinguishable from a clean
+-- exit and Snacks just closes the panel.
+local runner = require("agent_workbench.backend.launch").runner()
+t.eq(vim.fn.executable(runner), 1, "local-plugin/agent-workbench.nvim/scripts/agent-run is present and executable")
+
+-- The script itself: a clean exit passes straight through, a failure reports
+-- the status and says why the panel is still there.
+t.eq(vim.fn.system({ runner, "sh", "-c", "exit 0" }) == "" and vim.v.shell_error, 0,
+  "a clean exit passes through untouched")
+local failed = vim.fn.system({ runner, "sh", "-c", "echo boom; exit 7" })
+t.eq(vim.v.shell_error, 7, "a failure keeps the agent's own exit status")
+t.ok(failed:find("boom", 1, true) ~= nil, "and keeps the agent's own output")
+t.ok(failed:find("exited with status 7", 1, true) ~= nil, "and names the status")
+
+-- Both wrappers have to route the pane through it.
+if vim.fn.executable("tmux") == 1 then
+  local cmd = require("agent_workbench.backend.codex")._terminal_command({ "codex" })
+  local at = vim.fn.index(cmd, runner)
+  t.ok(at >= 0, "the Codex wrapper runs the pane through agent-run")
+  t.eq(cmd[at + 2], "codex", "with the agent command right after it")
+end
+-- Teardown. Quitting Nvim used to leave behind whatever the agent had spawned
+-- into its own process group -- tmux only signals the pane's own process, and
+-- the kernel's hangup only its session leader -- so a Codex exec_command dev
+-- server outlived its Nvim by three days with ppid 1. The wrapper's
+-- client-detached hook now runs local-plugin/agent-workbench.nvim/scripts/agent-teardown, which records the
+-- pane's process tree before the server goes and sweeps the survivors after.
+-- destroy-unattached has to be off for that hook to run at all: with it on, the
+-- server was gone before the hook fired (measured).
+local teardown = require("agent_workbench.backend.launch").teardown()
+t.eq(vim.fn.executable(teardown), 1, "local-plugin/agent-workbench.nvim/scripts/agent-teardown is present and executable")
+
+if vim.fn.executable("tmux") == 1 then
+  local cmd = require("agent_workbench.backend.codex")._terminal_command({ "codex" })
+  local joined = table.concat(cmd, " ")
+  t.ok(joined:find("destroy-unattached off", 1, true) ~= nil,
+    "the Codex wrapper keeps the session until its client-detached hook has run")
+  t.eq(cmd[#cmd - 1], "client-detached", "the Codex wrapper ends with the client-detached hook")
+  t.ok(teardown ~= "" and cmd[#cmd]:find(teardown, 1, true) ~= nil
+    and cmd[#cmd]:find("kill-server", 1, true) ~= nil,
+    "and that hook runs agent-teardown, falling back to kill-server")
+end
+-- The script itself, against a throwaway server shaped like a real pane: the
+-- real launcher (agent-run) -> an agent stand-in -> the agent's children, two
+-- of them in process groups of their own. One child is the leak shape (UC-1);
+-- the other names an ignore-listed daemon and must be left alone (UC-R3). The
+-- agent's argv -- and so the launcher's -- carries ignore-listed words too, as
+-- a plugin path can, and that must not exempt the tree: the ignore list only
+-- starts at the agent's children. The stand-in keeps its `&` list so no shell
+-- exec-optimises a level away; agent-run never does, it checks the status.
+if teardown ~= "" and vim.fn.executable("tmux") == 1 and vim.fn.executable("perl") == 1 then
+  local sock = "nvim-spec-teardown-" .. vim.fn.getpid()
+  local orphan = "nvim-spec-orphan-" .. vim.fn.getpid()
+  local keep = "nvim-spec-crashpad_handler-" .. vim.fn.getpid()
+  local children = table.concat({
+    "perl -e 'setpgrp(0,0); sleep 300' " .. orphan .. " &",
+    "perl -e 'setpgrp(0,0); sleep 300' " .. keep .. " &",
+    "sleep 300",
+  }, " ")
+  local function alive(tag) return vim.fn.system({ "pgrep", "-f", tag }) ~= "" end
+  vim.fn.system({ "tmux", "-f", "/dev/null", "-L", sock, "new-session", "-d", "-s", "main",
+    runner, "sh", "-c", children, "--plugin-dir", "/x/gradle/emulator/" })
+  vim.wait(2000, function() return alive(orphan) and alive(keep) end, 100)
+  t.ok(alive(orphan) and alive(keep), "the stand-in tree is up before teardown")
+
+  -- The default form returns at once and does the work detached (a hook's job
+  -- dies with the server); --wait is the watchdog's synchronous form.
+  vim.fn.system({ teardown, "--wait", sock })
+  t.eq(vim.v.shell_error, 0, "agent-teardown --wait exits 0")
+  vim.fn.system({ "tmux", "-L", sock, "list-sessions" })
+  t.ok(vim.v.shell_error ~= 0, "the tmux server is gone")
+  t.ok(not alive(orphan), "the own-process-group child went with it (UC-1)")
+  t.ok(alive(keep), "an ignore-listed process under the pane was left alone (UC-R3)")
+  vim.fn.system({ "pkill", "-f", keep })
+
+  -- A server that is already gone is a no-op, not an error (UC-3).
+  vim.fn.system({ teardown, sock })
+  t.eq(vim.v.shell_error, 0, "agent-teardown on a dead server is a quiet no-op")
+  remove_socket(sock)
+end
+
+-- Metadata from the provider, rather than Snacks' command guesses, owns identity.
+vim.b[plain].snacks_terminal = nil
+t.eq(ai_term.agent_of(plain), "codex", "agent identity survives removing Snacks metadata")
+t.eq(require("agent_workbench").session_of_buffer(plain).kind, "codex", "host UI uses the same public identity")
+t.eq(require("lazy.core.config").plugins["claudecode.nvim"], nil, "no Claude integration is installed by this config")
+t.eq(vim.fn.exists(":ClaudeCode"), 0, "no Claude launch command remains")
+local file = vim.api.nvim_create_buf(false, true)
+vim.b[file].agent_workbench = { id = "native:codex", kind = "codex" }
+t.eq(ai_term.agent_of(file), nil, "a file cannot become an agent terminal from metadata alone")
+pcall(vim.fn.jobstop, vim.bo[plain].channel)
+pcall(vim.api.nvim_buf_delete, plain, { force = true })
+vim.fn.delete(vim.fs.dirname(bin), "rf")
+t.done()

@@ -1,0 +1,97 @@
+-- Text objects and the which-key entries that advertise them.
+--
+-- mini.ai maps `i` and `a` as one expr key each and reads the object letter
+-- itself, so which-key cannot see the objects it adds: after `di` the popup
+-- listed the builtin objects and treesitter-textobjects' `f`/`c`, but not
+-- mini.ai's `a` (argument) or `o` (block). The manual promises "press d, then
+-- i, and the menu lists the rest", so lua/tillervim/config/whichkey_spec.lua carries desc-only
+-- entries for every object the manual documents. Description-only entries stay
+-- in which-key's trie, so this correctly asserts against the table rather than
+-- maparg() (functional entries with an RHS are real mappings after VimEnter).
+local t = dofile("tests/helper.lua")
+
+-- VeryLazy never fires headless; load what the objects need explicitly.
+vim.cmd("Lazy! load mini.ai nvim-treesitter-textobjects")
+
+-- UC-2: every documented syntax-aware object has a which-key entry in both
+-- Visual and Operator-pending mode, worded like which-key's own presets
+-- ("inner word" / "word with ws") rather than like the plugin's mapping desc.
+-- mini.ai's objects, and the `al`/`il`/`an`/`in` prefixes whose own descs
+-- read "Around last textobject" / "Select parent (outer) node", are desc-only
+-- entries.
+local want = {
+  ia = "inner argument",
+  aa = "argument with separator",
+  io = "inner block/conditional/loop",
+  ao = "block/conditional/loop",
+  al = "last textobject (al + object key)",
+  il = "inner last textobject (il + object key)",
+  an = "parent node",
+  ["in"] = "child node",
+}
+local found = {}
+for _, entry in ipairs(require("tillervim.config.whichkey_spec").spec) do
+  if type(entry[1]) == "string" and want[entry[1]] and entry.desc then
+    local modes = type(entry.mode) == "table" and entry.mode or { entry.mode }
+    found[entry[1]] = { desc = entry.desc, modes = modes }
+  end
+end
+for _, lhs in ipairs({ "ia", "aa", "io", "ao", "al", "il", "an", "in" }) do
+  local got = found[lhs]
+  t.ok(got ~= nil, "UC-2: whichkey_spec describes " .. lhs)
+  if got then
+    t.eq(got.desc, want[lhs], "UC-2: " .. lhs .. " uses the shared wording")
+    t.ok(vim.tbl_contains(got.modes, "o") and vim.tbl_contains(got.modes, "x"),
+      "UC-2: " .. lhs .. " is listed after an operator and in Visual")
+  end
+end
+-- treesitter-textobjects' own objects carry the same words as real descs: a
+-- desc-only entry would outrank VimTeX's `ac`/`ic` (a command) in TeX buffers.
+for lhs, desc in pairs({ ["if"] = "inner function", af = "function", ic = "inner class", ac = "class" }) do
+  t.ok(found[lhs] == nil, "UC-2: " .. lhs .. " has no desc-only entry")
+  for _, mode in ipairs({ "x", "o" }) do
+    t.eq(vim.fn.maparg(lhs, mode, false, true).desc, desc, ("UC-2: %s %s is described as %q"):format(mode, lhs, desc))
+  end
+end
+
+-- UC-R2: the entries are descriptions only. The objects themselves still come
+-- from mini.ai / treesitter-textobjects, so `daa` keeps taking the separator.
+local buf = vim.api.nvim_create_buf(false, true)
+vim.api.nvim_set_current_buf(buf)
+vim.bo[buf].filetype = "lua"
+vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "foo(bar, baz)" })
+-- A live session keeps the tree parsed through the highlighter; headless it
+-- is parsed on demand, and mini.ai reports "no textobject" on an unparsed one.
+vim.treesitter.get_parser(buf, "lua"):parse(true)
+vim.api.nvim_win_set_cursor(0, { 1, 10 }) -- on "baz"
+vim.cmd("normal daa")
+t.eq(vim.api.nvim_buf_get_lines(buf, 0, -1, false), { "foo(bar)" },
+  "UC-R2: daa still deletes the argument together with its comma")
+
+-- UC-R3: mini.ai's "next" variants are off, so its `an`/`in` no longer shadow
+-- Nvim 0.12's builtin node selection.
+for _, mode in ipairs({ "x", "o" }) do
+  for _, lhs in ipairs({ "an", "in" }) do
+    local map = vim.fn.maparg(lhs, mode, false, true)
+    local src = map.callback and debug.getinfo(map.callback, "S").source or ""
+    t.ok(not src:find("mini/ai.lua", 1, true), ("UC-R3: %s %s is not mini.ai's"):format(mode, lhs))
+    t.ok(src:find("_core/defaults", 1, true) ~= nil, ("UC-R3: %s %s is the builtin node selection"):format(mode, lhs))
+  end
+end
+
+-- UC-R4: `g[f`/`g]f` go through mini.ai's custom treesitter `f`, not its
+-- function-call default -- the reason that custom object stays even though
+-- treesitter-textobjects owns `af`/`if` (lua/tillervim/config/whichkey_spec.lua "g]f = function
+-- end").
+vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+  "local function outer(x)",
+  "  local y = call(x, 1)",
+  "  return y",
+  "end",
+})
+vim.treesitter.get_parser(buf, "lua"):parse(true)
+vim.api.nvim_win_set_cursor(0, { 2, 14 }) -- inside call(...)
+vim.cmd("normal g]f")
+t.eq(vim.api.nvim_win_get_cursor(0)[1], 4, "UC-R4: g]f lands on the function definition's end")
+
+t.done()

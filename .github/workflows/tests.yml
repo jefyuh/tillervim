@@ -1,0 +1,119 @@
+# Runs the checks AGENTS.md asks for before a change lands. The spec suite is
+# the point: tests/*_spec.lua load the real configuration with `-u init.lua`,
+# so they catch what a startup check cannot, and each spec exits through
+# `cquit` so a failure is a non-zero exit rather than a green log.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same branch makes the first run irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  specs:
+    strategy:
+      fail-fast: false
+      matrix:
+        neovim: [v0.12.5, stable]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # Exercise both the advertised floor and the current stable release;
+      # ubuntu's apt Neovim is older than either.
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.neovim }}
+
+      # rg and fd back the pickers, tmux backs the agent terminal specs.
+      - name: Install runtime dependencies
+        run: sudo apt-get update && sudo apt-get install -y ripgrep fd-find tmux
+
+      # native_attach_spec attaches codelldb to a process the spec started.
+      # Ubuntu's default ptrace_scope of 1 lets a process be traced only by
+      # its ancestors, and codelldb is the debuggee's sibling.
+      - name: Allow a debugger to attach to a running process
+        run: sudo sysctl -w kernel.yama.ptrace_scope=0
+
+      # nvim-treesitter's main branch compiles every parser with
+      # `tree-sitter build` (gcc is already on the image). apt's tree-sitter-cli
+      # is far below the 0.26.1 floor in lua/tillervim/health.lua, so take the
+      # upstream release at that floor, the way the matrix pins Nvim's.
+      - name: Install the tree-sitter CLI
+        env: { TREE_SITTER_VERSION: v0.26.1 }
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/tree-sitter/tree-sitter/releases/download/$TREE_SITTER_VERSION/tree-sitter-linux-x64.gz" \
+            | gunzip > "$HOME/.local/bin/tree-sitter"
+          chmod +x "$HOME/.local/bin/tree-sitter"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/tree-sitter" --version
+
+      # init.lua registers its checkout on rtp for bootstrap. Also expose it at
+      # stdpath("config") for plugins/tools that look there directly, as on a
+      # real machine where the repo lives at ~/.config/nvim.
+      - name: Expose the checkout as the Neovim config directory
+        run: |
+          mkdir -p "$HOME/.config"
+          ln -s "$GITHUB_WORKSPACE" "$HOME/.config/nvim"
+
+      # lazy.nvim bootstraps and clones on first start. Doing it as its own step
+      # keeps a clone failure from being reported as a spec failure.
+      #
+      # A headless `+qa` exits 0 even when init.lua raised, so every startup
+      # below asks v:errmsg instead of trusting the exit status.
+      - name: Install plugins
+        run: nvim --headless -u init.lua -i NONE "+Lazy! install" "$FAIL_ON_ERRMSG" +qa
+        env: { FAIL_ON_ERRMSG: '+lua if vim.v.errmsg ~= "" then vim.cmd("cquit 1") end' }
+
+      # mason-lspconfig, mason-nvim-dap and the language modules' tool lists
+      # install their packages once their plugins load. On a fresh runner that
+      # happened during the spec suite, so whether a spec that needs one ran,
+      # skipped or failed depended on the race. Install them all first.
+      - name: Install the Mason packages
+        run: |
+          nvim --headless -u init.lua -i NONE "+Lazy! load nvim-lspconfig nvim-dap" "+luafile .github/mason-wait.lua" +qa
+
+      # CodeDiff diffs through a native library it downloads into its plugin
+      # directory on first setup. The spec suite never downloads
+      # (tests/run.sh), so load the plugin once here to fetch it, and check
+      # it against the release's SHA256SUMS -- CodeDiff's installer does not.
+      # Its file watcher is left out: without it the views poll, which the
+      # specs are fine with.
+      - name: Install CodeDiff's native library
+        run: |
+          nvim --headless -u init.lua -i NONE "+Lazy! load codediff.nvim" +qa
+          dir="$HOME/.local/share/nvim/lazy/codediff.nvim"
+          version=$(cat "$dir/VERSION")
+          case "$(uname -m)" in aarch64|arm64) arch=arm64 ;; *) arch=x64 ;; esac
+          curl -fsSL "https://github.com/esmuellert/codediff.nvim/releases/download/v$version/SHA256SUMS" -o "$RUNNER_TEMP/codediff.sums"
+          check() { # <installed file> <release asset name>
+            want=$(awk -v name="$2" '$2 == name { print $1 }' "$RUNNER_TEMP/codediff.sums")
+            got=$(sha256sum "$dir/$1" | cut -d' ' -f1)
+            [ -n "$want" ] && [ "$want" = "$got" ] || { echo "$1: sha256 $got, release says '$want'"; exit 1; }
+            echo "$1: $got (matches $2)"
+          }
+          check "libvscode_diff_$version.so" "libvscode_diff_linux_${arch}_$version.so"
+          # Only fetched when the system has no libgomp.
+          if [ -e "$dir/libgomp.so.1" ]; then check libgomp.so.1 "libgomp_linux_${arch}_$version.so.1"; fi
+
+      - name: Spec suite
+        run: ./tests/run.sh
+
+      - name: Start
+        run: nvim --headless -u init.lua -i NONE "$FAIL_ON_ERRMSG" +qa
+        env: { FAIL_ON_ERRMSG: '+lua if vim.v.errmsg ~= "" then vim.cmd("cquit 1") end' }
+
+      # No trailing-whitespace gate here on purpose. AGENTS.md's local
+      # `git diff --check` inspects changed lines only; the committed tree still
+      # carries trailing whitespace in three files (util/logger,
+      # util/lsp, docs/UTILITIES.md), so a repo-wide grep would fail every run
+      # until those are cleaned up. Add the gate together with that cleanup.

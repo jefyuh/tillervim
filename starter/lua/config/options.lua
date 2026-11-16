@@ -1,0 +1,3 @@
+-- Loaded after default editor options, before other startup plugins.
+-- Use ordinary Neovim options and globals here.
+-- vim.opt.relativenumber = false

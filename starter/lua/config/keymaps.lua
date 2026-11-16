@@ -1,0 +1,4 @@
+-- Loaded after default mappings. Use vim.keymap.set/del directly.
+-- vim.keymap.del("n", "<leader>qq")
+-- vim.keymap.set("n", "<leader>qq", "<cmd>confirm qa<cr>", { desc = "Quit all" })
+-- Configure plugin mappings through that plugin's lazy.nvim `keys` or `opts`.

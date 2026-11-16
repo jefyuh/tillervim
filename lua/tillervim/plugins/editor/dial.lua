@@ -1,0 +1,54 @@
+-- dial writes to the buffer unconditionally (nvim_buf_set_text), so a
+-- mis-hit in a read-only window (dashboard/help/quickfix) raises E5108/E21.
+-- Guard: no-op the expr mapping when the buffer is not modifiable.
+local function dial(fn)
+  return function()
+    if not vim.bo.modifiable then
+      return ""
+    end
+    return require("dial.map")[fn]()
+  end
+end
+
+return {
+  "monaqa/dial.nvim",
+  keys = {
+    { "<C-a>",  dial("inc_normal"),  expr = true, desc = "Increment" },
+    { "<C-x>",  dial("dec_normal"),  expr = true, desc = "Decrement" },
+    { "g<C-a>", dial("inc_gnormal"), expr = true, desc = "Increment (progressive)" },
+    { "g<C-x>", dial("dec_gnormal"), expr = true, desc = "Decrement (progressive)" },
+    -- "x", not "v": in Select mode (a snippet placeholder) a typed `g` must
+    -- replace the text, not wait for g<C-a>. An unmapped Select <C-a> still
+    -- increments, as Visual mode's builtin.
+    { "<C-a>",  dial("inc_visual"),  mode = "x",  expr = true, desc = "Increment" },
+    { "<C-x>",  dial("dec_visual"),  mode = "x",  expr = true, desc = "Decrement" },
+    { "g<C-a>", dial("inc_gvisual"), mode = "x",  expr = true, desc = "Increment (progressive)" },
+    { "g<C-x>", dial("dec_gvisual"), mode = "x",  expr = true, desc = "Decrement (progressive)" },
+  },
+  opts = function()
+    local augend = require("dial.augend")
+    return {
+      augends = {
+        default = {
+          augend.integer.alias.decimal,
+          augend.integer.alias.hex,
+          augend.date.alias["%Y/%m/%d"],
+          augend.date.alias["%Y-%m-%d"],
+          augend.constant.alias.bool,
+          augend.semver.alias.semver,
+          augend.constant.new({ elements = { "&&", "||" }, word = false, cyclic = true }),
+          augend.constant.new({ elements = { "==", "!=" }, word = false, cyclic = true }),
+          augend.constant.new({ elements = { "yes", "no" }, word = true, cyclic = true }),
+          augend.constant.new({ elements = { "and", "or" }, word = true, cyclic = true }),
+          augend.constant.new({ elements = { "True", "False" }, word = true, cyclic = true }),
+        },
+      },
+      filetypes = {},
+    }
+  end,
+  config = function(_, opts)
+    local config = require("dial.config")
+    config.augends:register_group(opts.augends)
+    config.augends:on_filetype(opts.filetypes)
+  end,
+}

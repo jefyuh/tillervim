@@ -1,0 +1,213 @@
+local t = dofile("tests/helper.lua")
+
+-- The LSP keys are buffer-local: they only exist after a real client attaches,
+-- so this spec starts a real lua_ls against this repository rather than
+-- asserting against the spec table. A startup check cannot see any of them.
+
+-- <leader>m's LSP keys are global, so they need no client: checked before the
+-- skip below. mi reads :checkhealth and works without a server; mr restarts the
+-- file's servers and does nothing without one, hence the [LSP] prefix.
+for lhs, want in pairs({
+  ["<leader>mi"] = "LSP info",
+  ["<leader>mr"] = "[LSP] Restart servers",
+}) do
+  t.eq(vim.fn.maparg(lhs, "n", false, true).desc, want, lhs .. " is " .. want)
+end
+
+vim.cmd("edit lua/tillervim/util/cwd.lua")
+local attached = vim.wait(30000, function()
+  return #vim.lsp.get_clients({ bufnr = 0 }) > 0
+end, 200)
+
+if not attached then
+  -- Mason may not have lua_ls installed yet on a fresh clone. Say so instead of
+  -- failing every assertion below, which would read as a broken keymap.
+  print("SKIP - no LSP client attached to lua/tillervim/util/cwd.lua (is lua_ls installed?)")
+  t.done()
+  return
+end
+
+local function mapping(lhs, mode)
+  return vim.fn.maparg(lhs, mode or "n", false, true)
+end
+
+-- Every jump that starts from the symbol under the cursor lives on `g`. These
+-- are the keys AGENTS.md pins; a rename here is a documentation change too.
+for lhs, want in pairs({
+  gd = "[LSP] Definition",
+  gr = "[LSP] References",
+  gb = "[LSP] Implementation (body)",
+  gy = "[LSP] Type definition",
+  gD = "[LSP] Declaration",
+  gC = "[LSP] Incoming calls",
+  gK = "[LSP] Signature help",
+  K  = "[LSP] Hover",
+}) do
+  local m = mapping(lhs)
+  t.eq(m.desc, want, lhs .. " is " .. want)
+  t.eq(m.buffer, 1, lhs .. " is buffer-local, so plain buffers keep the builtin")
+end
+
+-- Without <nowait> every `gr` press waits out 'timeoutlen' (1s by default),
+-- because Nvim's default grr/gri/grt/gra/grn/grx are longer candidates. This is
+-- the whole reason References is reachable at speed.
+t.eq(mapping("gr").nowait, 1, "gr fires immediately instead of waiting for gr*")
+
+-- <nowait> costs the gr* defaults their second key inside an LSP buffer, so each
+-- one needs a shorter equivalent here. ,c exists specifically to replace grx.
+for lhs, want in pairs({
+  [",a"] = "[LSP] Code action…",    -- replaces gra; asks which action
+  [",r"] = "[LSP] Rename…",         -- replaces grn; asks the new name
+  [",c"] = "[LSP] Run codelens",    -- replaces grx, which has no other route
+}) do
+  t.eq(mapping(lhs).desc, want, lhs .. " covers a gr* default that nowait hides")
+end
+-- ,a takes a Visual range (as gra does), but not in Select mode: there a `,`
+-- typed into a snippet placeholder must replace it (tests/select_mode_spec.lua).
+t.eq({ mapping(",a", "x").desc, mapping(",a", "x").mode }, { "[LSP] Code action…", "x" },
+  ",a acts on a Visual selection")
+t.eq(mapping(",a", "s"), {}, ",a is not mapped in Select mode")
+
+-- Vim's own g keys must survive: gi/gI insert, gc comments. Implementation and
+-- incoming calls took free letters precisely so these stayed builtin.
+t.eq(mapping("gI"), {}, "gI is still Vim's insert-at-column-1")
+t.eq(mapping("gi"), {}, "gi is still Vim's resume-last-insert")
+-- gs (source definition) is vtsls's own; elsewhere it stays Vim's :sleep.
+t.eq(mapping("gs"), {}, "gs is only mapped where vtsls attaches")
+
+-- Nvim 0.11's defaults are not overridden, only shadowed inside LSP buffers.
+for _, lhs in ipairs({ "grr", "gri", "grt", "gra", "grn", "grx" }) do
+  t.eq(mapping(lhs).buffer, 0, lhs .. " remains Nvim's own global mapping")
+end
+
+-- The fuzzy symbol pickers take no starting symbol, so they stay on `;`.
+t.eq(mapping(";s").desc, "[LSP] Symbol in file", ";s stays a fuzzy picker")
+t.eq(mapping(";S").desc, "[LSP] Symbol in workspace", ";S stays a fuzzy picker")
+-- ;c used to be incoming calls; that moved to gC because it needs a symbol to
+-- start from. The key now lists git hunks, a global picker, not an LSP jump.
+t.eq(mapping(";c").desc, "Git hunks", ";c is the repository hunk picker")
+t.eq(mapping(";c").buffer, 0, ";c is global, not attached with the server")
+
+-- lua_ls computes no inlay hints unless Lua.hint.enable is set, which left
+-- <leader>uh blank in Lua buffers. Asked directly, the server must answer with
+-- hints; whether they are drawn stays up to the toggle.
+local lua_ls = vim.lsp.get_clients({ bufnr = 0, name = "lua_ls" })[1]
+t.ok(lua_ls ~= nil, "lua_ls is the attached client")
+if lua_ls then
+  t.eq(lua_ls.settings.Lua.hint.enable, true, "lua_ls is configured to compute hints")
+  t.eq(vim.lsp.inlay_hint.is_enabled({ bufnr = 0 }), false, "inlay hints stay off until <leader>uh")
+  local hints = {}
+  vim.wait(30000, function()
+    local reply = lua_ls:request_sync("textDocument/inlayHint", {
+      textDocument = vim.lsp.util.make_text_document_params(0),
+      range = { start = { line = 0, character = 0 },
+        ["end"] = { line = vim.api.nvim_buf_line_count(0), character = 0 } },
+    }, 5000, 0)
+    hints = reply and reply.result or {}
+    return #hints > 0
+  end, 500)
+  t.ok(#hints > 0, ("lua_ls returns inlay hints for lua/tillervim/util/cwd.lua (%d)"):format(#hints))
+end
+
+-- K is silent. Hovering a blank line is routine, and K asks hover() not to
+-- raise the "No information available" notice it would raise each time (noice's
+-- own hover, which once filtered it out, is off: lua/tillervim/plugins/ui/noice.lua). The
+-- unsilenced call first proves the server answers at that spot, so the
+-- silence below is not just a slow server.
+local notified = {}
+local real_notify = vim.notify
+vim.notify = function(msg) notified[#notified + 1] = tostring(msg) end
+local blank
+for i, line in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
+  if line == "" then blank = i; break end
+end
+vim.api.nvim_win_set_cursor(0, { blank, 0 })
+-- Until its workspace is loaded, lua_ls answers every hover with a "Workspace
+-- loading" document, which would open a popup instead.
+local hover_params = vim.lsp.util.make_position_params(0, "utf-16")
+for _ = 1, 60 do
+  local replies = vim.lsp.buf_request_sync(0, "textDocument/hover", hover_params, 2000) or {}
+  local reply = select(2, next(replies))
+  if reply and reply.result == nil and reply.err == nil then break end
+  vim.wait(500)
+end
+vim.lsp.buf.hover()
+local answered = vim.wait(10000, function() return #notified > 0 end, 50)
+t.ok(answered and notified[1] == "No information available",
+  "an unsilenced hover on a blank line reports that it found nothing")
+notified = {}
+mapping("K").callback()
+vim.wait(2000, function() return #notified > 0 end, 50)
+t.eq(notified, {}, "K on a blank line raises no notification")
+vim.notify = real_notify
+
+-- <C-f>/<C-b> scroll an open hover from the code window (noice's own hover
+-- is off, and its scroll keys with it); with no popup they stay a page scroll. A plain float stands in for
+-- the hover, tagged the way open_floating_preview tags one: the buffer var
+-- naming the window, plus the hover focus_id as a window var.
+local scroll_f, scroll_b = mapping("<C-f>"), mapping("<C-b>")
+t.eq(scroll_f.desc, "[LSP] Scroll hover/page", "<C-f> is the hover/page scroll")
+t.eq(scroll_f.buffer, 1, "<C-f> is buffer-local, so plain buffers keep the builtin")
+t.eq(scroll_f.callback(), "<C-f>", "<C-f> without a popup is the usual page scroll")
+
+-- The diagnostic float that ]d / [d open goes through open_floating_preview
+-- too, so it also sets b:lsp_floating_preview. It must not capture the key:
+-- scrolling never moves the cursor, so it would stay open and swallow every
+-- later page scroll.
+local diag_ns = vim.api.nvim_create_namespace("lsp_keymap_spec")
+local diag_line = vim.api.nvim_win_get_cursor(0)[1] - 1
+vim.diagnostic.set(diag_ns, 0, {
+  { lnum = diag_line, col = 0, message = "spec diagnostic", severity = vim.diagnostic.severity.WARN },
+})
+local _, diag_float = vim.diagnostic.open_float({ scope = "line" })
+t.ok(diag_float and vim.b.lsp_floating_preview == diag_float,
+  "the diagnostic float is recorded as the buffer's preview float")
+t.eq(scroll_f.callback(), "<C-f>", "<C-f> pages the buffer while a diagnostic float is open")
+t.eq(scroll_b.callback(), "<C-b>", "<C-b> pages the buffer while a diagnostic float is open")
+if diag_float and vim.api.nvim_win_is_valid(diag_float) then vim.api.nvim_win_close(diag_float, true) end
+vim.diagnostic.reset(diag_ns, 0)
+
+local doc = vim.api.nvim_create_buf(false, true)
+local doc_lines = {}
+for i = 1, 60 do doc_lines[i] = "line " .. i end
+vim.api.nvim_buf_set_lines(doc, 0, -1, false, doc_lines)
+local popup = vim.api.nvim_open_win(doc, false,
+  { relative = "cursor", row = 1, col = 0, width = 20, height = 5 })
+vim.b.lsp_floating_preview = popup
+vim.w[popup]["textDocument/hover"] = vim.api.nvim_get_current_buf()
+local code_win, code_top = vim.api.nvim_get_current_win(), vim.fn.line("w0")
+local function topline() return vim.fn.getwininfo(popup)[1].topline end
+t.eq(scroll_f.callback(), "", "<C-f> with a popup open consumes the key")
+t.ok(vim.wait(2000, function() return topline() > 1 end, 20), "<C-f> scrolls the popup down")
+local scrolled = topline()
+t.eq(scroll_b.callback(), "", "<C-b> with a popup open consumes the key")
+t.ok(vim.wait(2000, function() return topline() < scrolled end, 20), "<C-b> scrolls the popup back up")
+t.eq(vim.api.nvim_get_current_win(), code_win, "focus stays in the code window")
+t.eq(vim.fn.line("w0"), code_top, "the code window itself does not scroll")
+vim.api.nvim_win_close(popup, true)
+t.eq(scroll_b.callback(), "<C-b>", "<C-b> after the popup closed is a page scroll again")
+
+-- A require path is not a renameable Lua symbol. This used to open IncRename
+-- and immediately cancel it without showing its stored "Nothing to rename".
+vim.cmd("edit lua/tillervim/init.lua")
+t.ok(vim.wait(10000, function()
+  return #vim.lsp.get_clients({ bufnr = 0, name = "lua_ls" }) > 0
+end, 50), "lua_ls attaches to the startup module")
+local rename_position
+for row, line in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
+  local col = line:find('"tillervim.bootstrap.setup"', 1, true)
+  if col then rename_position = { row, col }; break end
+end
+t.ok(rename_position ~= nil, "the startup module requires bootstrap.setup")
+if rename_position then vim.api.nvim_win_set_cursor(0, rename_position) end
+notified = {}
+vim.notify = function(msg, level) notified[#notified + 1] = { msg = tostring(msg), level = level } end
+mapping(",r").callback()
+t.ok(vim.wait(10000, function() return #notified > 0 end, 50), "renaming bootstrap.setup reports a refusal")
+t.ok(notified[1] and notified[1].msg:find("symbol at cursor cannot be renamed", 1, true),
+  "the refusal explains why bootstrap.setup cannot be renamed")
+t.eq(notified[1] and notified[1].level, vim.log.levels.ERROR, "the refusal is an error notification")
+t.eq(package.loaded.inc_rename, nil, "the unsupported require path never opens IncRename")
+vim.notify = real_notify
+
+t.done()
