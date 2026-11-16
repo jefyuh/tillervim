@@ -138,6 +138,7 @@ Our own packages expose their own options and callable APIs. For example:
 -- lua/plugins/agent.lua
 return {
   "agent-workbench.nvim",
+  optional = true, -- Override the bundled package once its distribution is installed.
   opts = { terminal = { provider = "native" }, panel = { width = 100 } },
 }
 ```

@@ -1,6 +1,6 @@
 local root = require("tillervim").root()
 return {
-  dir = root .. "/local-plugin/git-review.nvim", name = "git-review.nvim", main = "git_review",
+  virtual = true, dir = root .. "/local-plugin/git-review.nvim", name = "git-review.nvim", main = "git_review",
   opts = function()
     local opts = require("tillervim.util.settings").git()
     opts.resolve = require("tillervim.util.settings").git_overrides

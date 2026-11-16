@@ -13,7 +13,7 @@ local function relabel_inline()
   end
 end
 return {
-  dir = root .. "/local-plugin/agent-workbench.nvim", name = "agent-workbench.nvim", main = "agent_workbench",
+  virtual = true, dir = root .. "/local-plugin/agent-workbench.nvim", name = "agent-workbench.nvim", main = "agent_workbench",
   lazy = false, priority = 9000,
   keys = {
     { "<leader>an", function() require("agent_workbench").new_chat() end, mode = { "n", "x" }, desc = "New AI chat…" },

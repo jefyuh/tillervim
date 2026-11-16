@@ -24,10 +24,13 @@ t.ok(Config.plugins["codecompanion.nvim"] ~= nil and not loaded("codecompanion.n
   "CodeCompanion stays lazy until its first action")
 t.eq(Config.plugins["claudecode.nvim"], nil, "no native Claude plugin is declared")
 t.eq(vim.fn.exists(":ClaudeCode"), 0, "no Claude command is installed")
--- A developer may still have the removed integration installed in the shared
--- lazy directory; fresh installs have nothing to clean.
+-- A developer can have both an installed distribution and this local source
+-- checkout, as well as the deliberately removed historical integration.
 for _, plugin in ipairs(Config.to_clean) do
-  t.eq(plugin.name, "claudecode.nvim", "only the intentionally removed integration may be left installed")
+  local installed_copy = plugin.name == "tillervim"
+    and Config.plugins.tillervim.dir ~= Config.options.root .. "/tillervim"
+  t.ok(plugin.name == "claudecode.nvim" or installed_copy,
+    "only historical Claude or the installed copy shadowed by this source host may be unused")
 end
 for _, module in ipairs({ "agent_workbench.backend.codex", "agent_workbench.terminal_provider",
   "agent_workbench.provider.snacks", "agent_workbench.provider.native" }) do

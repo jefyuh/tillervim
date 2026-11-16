@@ -1,7 +1,7 @@
 local root = require("tillervim").root()
 return {
   {
-    dir = root .. "/local-plugin/editor-core.nvim", name = "editor-core.nvim", main = "editor_core",
+    virtual = true, dir = root .. "/local-plugin/editor-core.nvim", name = "editor-core.nvim", main = "editor_core",
     lazy = false, priority = 10000,
     opts = function()
       return {

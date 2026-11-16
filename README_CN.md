@@ -121,6 +121,7 @@ Oil、Snacks 和 Aerial 使用各自原生的映射选项；which-key 负责展�
 -- lua/plugins/agent.lua
 return {
   "agent-workbench.nvim",
+  optional = true, -- Override the bundled package once its distribution is installed.
   opts = { terminal = { provider = "native" }, panel = { width = 100 } },
 }
 ```

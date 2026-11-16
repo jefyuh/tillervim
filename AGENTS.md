@@ -72,6 +72,9 @@ practical, and consistent with the existing LazyVim-style key namespaces.
   to `agent_workbench.review`, not the storage layer. Scripts live in their
   owning package and resolve paths from source, not stdpath(config), so an
   isolated checkout/consumer executes its own scripts and lockfile.
+- Bundled packages use virtual lazy specs and explicitly registered runtime
+  paths. They belong to the distribution repository and must never be cloned
+  or cleaned as independent repositories inside lazy.nvim's managed root.
 - Do not introduce a semantic action-to-key registry or a universal key DSL.
   Core maps use `vim.keymap.set`; plugin mappings use native `keys`/`opts`.
   The Agent facade exposes behavior; its global mappings live in its lazy spec.

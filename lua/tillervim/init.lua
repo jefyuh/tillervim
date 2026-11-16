@@ -24,6 +24,12 @@ function M.prepare()
   if prepared then return end
   prepared = true
   require("tillervim.bootstrap.setup")
+  -- These packages ship inside this repository. Register their runtime paths
+  -- explicitly; virtual lazy specs configure them without cloning/cleaning
+  -- nested directories inside lazy.nvim's managed root.
+  for _, name in ipairs({ "editor-core", "agent-workbench", "git-review", "llama-service" }) do
+    vim.opt.rtp:append(root .. "/local-plugin/" .. name .. ".nvim")
+  end
 end
 
 function M.setup()
