@@ -520,7 +520,7 @@ local sections = {
     { "LaTeX · build", icon = "󰐊 ", color = "green", filetype = { "tex", "plaintex" }, keys = { "b", "s", "K", "E" } },
     { "LaTeX · preview/tools", icon = "󰈈 ", color = "purple", filetype = { "tex", "plaintex", "bib" }, keys = { "v", "t", "L" },
       labels = { L = "VimTeX" } },
-    { "Markdown · preview", icon = "󰍔 ", color = "cyan", filetype = { "markdown" }, keys = { "p", "m" } },
+    { "Markdown · preview", icon = "󰍔 ", color = "cyan", filetype = { "markdown", "markdown.gh" }, keys = { "p", "m" } },
     { "Chat · conversation/rendering", icon = "󰍔 ", color = "cyan", filetype = { "codecompanion" },
       keys = { "s", "X", "q", "z", "m" } },
     -- grug-far's own actions sit under ,S in its panel only; elsewhere a
