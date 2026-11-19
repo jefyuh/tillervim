@@ -98,7 +98,8 @@ for _, kind in ipairs({ "oil", "issue", "pr" }) do
       title = "Reading fixture",
       author = { login = "fixture" },
       state = "OPEN",
-      body = "# Goal\n\n## Review\n\n- first\n- second",
+      body = "# Goal\n\n## Review\n\n- first\n- second\n\n" .. string.rep("Paragraph.\n\n", 80)
+        .. "| Result | Value |\n| --- | --- |\n| Later table | 42 |",
     }, { repo = "fixture/repo", type = kind })
     buf = vim.api.nvim_create_buf(true, false)
     vim.api.nvim_buf_set_name(buf, item.uri)
@@ -109,6 +110,18 @@ for _, kind in ipairs({ "oil", "issue", "pr" }) do
     t.eq(vim.wo[reading_win].foldcolumn, "0", kind .. " hides the fold depth column")
     t.ok(not vim.wo[reading_win].number and not vim.wo[reading_win].relativenumber,
       kind .. " keeps the reading view free of line numbers")
+    local row = vim.fn.search("^| Later table", "nw")
+    assert(row > 0, "missing table in GitHub fixture")
+    local ns = vim.api.nvim_get_namespaces()["render-markdown.nvim"]
+    local function table_rendered()
+      return #vim.api.nvim_buf_get_extmarks(buf, ns, { row - 1, 0 }, { row - 1, -1 }, {}) > 0
+    end
+    t.ok(not table_rendered(), kind .. " starts with the later table outside the rendered area")
+    vim.api.nvim_win_set_cursor(reading_win, { row - 2, 0 })
+    vim.cmd("normal! zt")
+    vim.cmd.redraw()
+    vim.api.nvim_exec_autocmds("WinScrolled", { buffer = buf })
+    t.ok(vim.wait(2000, table_rendered, 10), kind .. " renders the table after scrolling to it")
   end
 
   -- Starting from either side must use the same editor area. Cancelling
