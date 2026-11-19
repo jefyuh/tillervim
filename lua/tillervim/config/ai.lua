@@ -21,7 +21,7 @@ return {
   -- Entries appear as terminals, then ACP, then API, in provider order.
   -- CodeCompanion's own chats use the first ACP adapter, else the first API.
   --
-  -- tui.kind: "codex"; another kind needs a backend implementation.
+  -- tui.kind: codex, antigravity, kimi or opencode. The personal profile selects transports.
   -- acp.adapter: an existing CodeCompanion ACP adapter; command checks PATH.
   --   A new adapter must also be registered in lua/tillervim/plugins/ai/codecompanion.lua.
   -- api.adapter: a CodeCompanion HTTP adapter; api_key names an NVIM_* variable.

@@ -107,9 +107,6 @@ return {
     { "<leader>gC", function() Snacks.picker.git_log() end,               desc = "Repo commits" },
 
     -- ── Misc snacks ─────────────────────────────────────────────────────
-    -- No tree sidebar: directories are browsed and edited through oil (`-`,
-    -- `;o`, lua/tillervim/plugins/editor/oil.lua) and files are reached through the
-    -- pickers above.
     {
       "<leader>un",
       function()
@@ -283,6 +280,7 @@ return {
       keys["<c-t>"] = { "tab", desc = "Open in tab", mode = mode }
       keys["<M-p>"] = { "toggle_preview", desc = "Preview", mode = mode }
     end
+    if require("tillervim.profile").selected.explorer == "tree" then opts.explorer = { enabled = true } end
     return opts
   end,
 }

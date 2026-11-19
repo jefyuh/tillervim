@@ -25,6 +25,7 @@ return {
   {
     "neovim/nvim-lspconfig",
     opts = {
+      tools = { prettier = {} },
       servers = {
         html = {},
         cssls = {},

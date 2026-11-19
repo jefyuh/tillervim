@@ -1,9 +1,16 @@
-*agent-workbench.txt*  Codex-first native CLI workbench
+*agent-workbench.txt*  Embedded agent terminals and chats
 
                                                         *agent-workbench*
 Neovim 0.12.5+. require("agent_workbench") is inert; setup(opts) runs once.
 Native terminal is built in. Snacks is optional and explicitly selected.
-Claude native integration is deferred. No Claude-only keys are installed.
+Native kinds are codex, antigravity, kimi and opencode. Each enabled kind
+owns one terminal session. In TillerVim, select native and ACP entries
+independently in tillervim.json. For example, kimi enables the interactive
+CLI and kimi-acp enables a CodeCompanion chat using the same executable.
+
+Codex provides the external prompt editor, native review hooks and transcript
+reader. The other TUIs manage history and model selection in their CLI.
+Select an ACP chat to use integrated round review with those agents.
 
 :AI                  Switch chat
 :AI new              New native/ACP/API entry, as configured by the host

@@ -230,12 +230,14 @@ function M.check()
   -- wrapper. A non-executable one is not fatal -- ctrl+g falls back to starting
   -- a nested nvim inside the :terminal -- but that failure is silent, so it is
   -- worth surfacing here rather than leaving it to be discovered mid-prompt.
-  local wrapper = require("agent_workbench.backend.launch").wrapper()
-  if vim.fn.executable(wrapper) == 1 then
-    health.ok("agent-editor wrapper executable — ctrl+g edits the TUI prompt in this Nvim")
-  else
-    health.warn(("%s not executable — ctrl+g will open a nested nvim instead"):format(wrapper),
-      { "chmod +x " .. wrapper })
+  if ai.agents.codex then
+    local wrapper = require("agent_workbench.backend.launch").wrapper()
+    if vim.fn.executable(wrapper) == 1 then
+      health.ok("agent-editor wrapper executable — ctrl+g edits the TUI prompt in this Nvim")
+    else
+      health.warn(("%s not executable — ctrl+g will open a nested nvim instead"):format(wrapper),
+        { "chmod +x " .. wrapper })
+    end
   end
 
   local function is_set(var) return vim.env[var] ~= nil and vim.env[var] ~= "" end
@@ -252,9 +254,11 @@ function M.check()
     end
   end
 
-  if not any then
+  if #ai.providers == 0 then
+    health.info("AI chat disabled in this configuration")
+  elseif not any then
     health.error("No AI backend is available: no agent CLI, ACP bridge or API key found",
-      { "Install codex, or set an NVIM_* API key; see README.md" })
+      { "Check the selected provider credentials and PATH; see README.md" })
   end
 
   -- An agent's own variable outranks its subscription login, so an export
@@ -271,7 +275,7 @@ function M.check()
   end
 
   if require("agent_workbench.options").get().integrations.review then
-    section("config: review hooks", check_hooks)
+    if ai.agents.codex then section("config: review hooks", check_hooks) end
     section("config: review settings (vim.g.ai_review)", check_review_settings)
     section("config: review drafts", check_drafts)
   end

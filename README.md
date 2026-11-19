@@ -22,20 +22,13 @@ configuration is a separate repository containing ordinary Lua and lazy.nvim spe
 - **Optional local ghost text:** Minuet and the bundled llama-service package.
   Its model starts only with an attached UI and an eligible file, never headless.
 
-Only Codex has a native backend in this release. Chat/HTTP integrations and
-local completion are independent of the native terminal. Setup starts no agent,
-chat, review baseline or model.
+Native terminals support Codex, Antigravity, Kimi Code and OpenCode. Each terminal and ACP chat transport can be selected independently. See the [setup guide](docs/SETUP.md) for themes, Snacks Explorer, language modules, dependencies and authentication.
 
 ## Requirements
 
-Neovim **0.12.5+**, Git, ripgrep and a terminal with a Nerd Font are the basics.
-Language features need their corresponding toolchains; Treesitter parser builds
-need a C compiler and tree-sitter-cli **0.26.1+**.
+Provide Neovim **0.12.5+**, Git and ripgrep. Syncing Treesitter parsers requires a C compiler and tree-sitter CLI **0.26.1+**. A Nerd Font renders icons. Provide project SDKs for the languages you enable.
 
-For the native terminal install and authenticate the `codex` CLI. `tmux` enables
-its preferred frame wrapper. ACP chat additionally needs `codex-acp`; HTTP chat
-reads `NVIM_OPENAI_API_KEY`, independently of CLI credentials. Run
-`:checkhealth tillervim` for the complete dependency report.
+Each selected AI transport has its own prerequisites. The native Codex terminal uses `codex` with optional tmux rendering. Codex ACP uses the separate `codex-acp` executable. OpenAI HTTP reads `NVIM_OPENAI_API_KEY`. See the [setup guide](docs/SETUP.md) for the other executables and sign-in methods.
 
 ## Install
 
@@ -47,6 +40,8 @@ tillervim_source="$(mktemp -d)"
 git clone --depth 1 https://github.com/jefyuh/tillervim.git "$tillervim_source"
 mkdir -p ~/.config/nvim
 cp -R "$tillervim_source/starter/." ~/.config/nvim/
+~/.config/nvim/bin/tillervim setup
+~/.config/nvim/bin/tillervim sync
 nvim
 ```
 
@@ -77,6 +72,10 @@ local leader is comma.
 ~/.config/nvim/
 ├── init.lua
 ├── bootstrap.lua      # Early loader/cwd validation
+├── bin/tillervim      # setup, sync, doctor
+├── configure.lua      # Pre-plugin wizard and checks
+├── profile.lua        # Starter catalogue and validation
+├── tillervim.json     # Personal choices written by setup
 ├── lua/config/
 │   ├── lazy.lua       # Plugin manager and imports
 │   ├── options.lua    # vim.opt and vim.g, after editor defaults

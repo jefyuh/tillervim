@@ -59,9 +59,9 @@ return {
     -- bufferline's defaults render them in near-background tones (comment_fg /
     -- tabline_sel_bg), which are nearly invisible on the solarized-osaka teal.
     -- Make the active tab an orange badge and the rest a bright bold number.
-    local c = require("solarized-osaka.colors").setup()
+    local c = vim.g.colors_name == "solarized-osaka" and require("solarized-osaka.colors").setup()
     return {
-      highlights = {
+      highlights = c and {
         tab                    = { fg = c.base0, bg = c.bg_highlight, bold = true },
         tab_selected           = { fg = c.bg, bg = c.orange, bold = true },
         tab_separator          = { fg = c.bg_highlight, bg = c.bg_highlight },
@@ -132,7 +132,7 @@ return {
         hint_diagnostic        = { fg = c.cyan, bg = c.bg_highlight },
         hint_diagnostic_visible = { fg = c.cyan, bg = c.bg_highlight },
         hint_diagnostic_selected = { fg = c.base4, bg = c.yellow, bold = true },
-      },
+      } or {},
       options = {
         diagnostics = "nvim_lsp",
         -- A tab's close icon, a right click and <leader>bl/br all go through

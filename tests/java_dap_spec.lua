@@ -3,7 +3,7 @@ local t = dofile("tests/helper.lua")
 local mason = vim.fn.stdpath("data") .. "/mason/packages/"
 if vim.fn.isdirectory(mason .. "jdtls") == 0 or vim.fn.isdirectory(mason .. "java-debug-adapter") == 0
   or vim.fn.isdirectory(mason .. "java-test") == 0
-  or vim.fn.executable("java") == 0 then
+  or not require("tillervim.util.jdk").for_jdtls() then
   print("SKIP - Java integration needs JDK 25+, jdtls, java-debug-adapter and java-test")
   t.done()
   return

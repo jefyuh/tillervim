@@ -97,18 +97,18 @@ report covers:
 - The macOS Normal-mode input source and whether it came from
   `NVIM_ENGLISH_INPUT_SOURCE` or the system keyboard-layout fallback
 - *config: AI backends*: the HTTP key profile; every native CLI, then every
-  ACP bridge, that the providers of `lua/tillervim/config/ai.lua` offer, in their order
+  ACP bridge, in the effective agent-workbench options, in their order
   (a missing one is a warning: the new-chat picker leaves it out and the rest
   still work); every key profile's variable
-  (`NVIM_ANTHROPIC_API_KEY` / `NVIM_OPENAI_API_KEY` by default; unset is a
+  (`NVIM_OPENAI_API_KEY` in the default profile; unset is a
   warning for the current profile, information for the rest); an error only
-  when nothing at all is available -- no agent CLI, ACP bridge or API key; and
+  when configured providers have no available transport (an empty provider list is reported as disabled); and
   a warning while a provider's own CLI variable (`ANTHROPIC_API_KEY` /
   `OPENAI_API_KEY`) is set
 - Inline completion: `llama-server`, whether its model is in the Hugging Face
   cache (the server starts `--offline`, so a missing model is a failed start),
   and whether the shared server is answering
-- Whether `local-plugin/agent-workbench.nvim/scripts/agent-editor` is executable. Both agent TUIs bind `ctrl+g` to
+- Whether `local-plugin/agent-workbench.nvim/scripts/agent-editor` is executable. The native Codex TUI binds `ctrl+g` to
   "edit this prompt in `$EDITOR`", and that wrapper is what makes the prompt open
   in this Nvim rather than in a second one nested inside the `:terminal`. It
   degrades to the nested editor silently, so the check is a warning, not an
@@ -338,18 +338,16 @@ reads two values: the library's version and the watcher release CodeDiff wants.
   and history panels scroll on their own. Restart Nvim after updating.
 ## AI and CodeCompanion
 
-This release enables native Codex only. Claude's CLI plugin, IDE proposal/diff
+Native terminals support Codex, Antigravity, Kimi Code and OpenCode. Run the starter’s `bin/tillervim doctor` to check the selected executables and credentials. See [setup and transport capabilities](SETUP.md). Claude's CLI plugin, IDE proposal/diff
 commands and Oil-specific actions are removed. Historical Claude transcripts and
 baseline labels remain readable. Do not reinstall claudecode.nvim to satisfy an
 old fixture or document; Claude protocol support is a later extension.
 
-- **Inspect configuration.** User declarations are `config/ai.lua`,
-  native lazy.nvim specs for `agent-workbench.nvim` and `git-review.nvim`; effective copied
+- **Inspect configuration.** Personal transport choices live in `tillervim.json`. Advanced settings live in personal lazy.nvim specs for `agent-workbench.nvim` and `git-review.nvim`. Effective copied
   plugin options are `require("agent_workbench").options()`. `:AI info` /
   `:AIInfo` show provider order, transport/billing, availability, open chats,
   HTTP profile and CLI billing keys. `:checkhealth tillervim` aggregates owner checks.
-- **No backend is offered.** Native Codex needs its executable. ACP needs
-  `codex-acp`; HTTP needs `NVIM_OPENAI_API_KEY`. Omitted provider parts are not
+- **No backend is offered.** Check the executable for the chosen transport. Only Codex ACP needs `codex-acp`. Antigravity, Kimi and OpenCode use their CLI for both transports. The default HTTP profile needs `NVIM_OPENAI_API_KEY`. Omitted provider parts are not
   offered. The ordered picker groups native/ACP/HTTP and hides unavailable
   entries. With no configured HTTP API, inline/cmd prompts refuse with a notice.
 - **Selected terminal cannot open.** `terminal.provider` is native, Snacks, or a
@@ -726,7 +724,11 @@ JDK it exits with code 13 right after starting. `lua/tillervim/plugins/lang/java
 first JDK 25+ among `$JAVA_HOME`, SDKMAN!'s `current`, the newest other
 SDKMAN! candidate and the `java` on PATH, so the default JDK may stay older;
 projects still build at the release level their build files set. Mason
-installs `jdtls`, `java-debug-adapter`, and `java-test`.
+installs `jdtls`, `java-debug-adapter`, and `java-test`. With only an older JDK,
+Java files still open and the Java parser supplies highlighting. The first Java
+buffer reports the runtime requirement once. `:checkhealth tillervim` checks
+the same candidates. Install a suitable JDK alongside the project JDK and
+save the Java buffer and run `:edit` there to enable language service and debugging.
 `<leader>dc` discovers main classes after jdtls attaches. Inspect the live
 `dap.adapters.java` and `dap.providers.configs.jdtls` then. The static Java list
 contains **java: attach to JDWP**; launch main classes are discovered dynamically.

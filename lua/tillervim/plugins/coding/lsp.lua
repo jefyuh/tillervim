@@ -55,9 +55,7 @@ return {
         -- nvim-jdtls and installed through java.lua's `tools`), so it is
         -- absent from the derived list and excluded from automatic_enable.
         ensure_installed = vim.tbl_keys(lsp_opts.servers or {}),
-        automatic_enable = {
-          exclude = { "jdtls" },
-        },
+        automatic_enable = vim.tbl_keys(lsp_opts.servers or {}),
       }
     end,
   },
@@ -240,7 +238,7 @@ return {
               vim.schedule(function()
                 vim.notify(("mason: unknown tool %q"):format(tool), vim.log.levels.WARN)
               end)
-            elseif not p:is_installed() then
+            elseif not p:is_installed() and not p:is_installing() then
               -- Report async install failures instead of silently no-op'ing.
               p:install(config, function(success, err)
                 if not success then

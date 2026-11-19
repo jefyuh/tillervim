@@ -12,7 +12,6 @@ local executables = {
   { "node",    "AI ACP bridges, npm-based Mason servers, ,x runner and debugging for JS/TS", false },
   { "tmux",    "native AI TUI frame wrapper",                          false },
   { "go",      "go toolchain, ,x runner for Go",                       false },
-  { "java",    "JDK 25+ runs jdtls; Java debugging",                   false },
   { "cargo",   "Rust binary and test debugging",                        false },
   { "dart",    "Dart debugging (or use a project FVM SDK)",             false },
   { "flutter", "Flutter debugging (or use a project FVM SDK)",          false },
@@ -74,7 +73,16 @@ function M.check()
   end
 
   health.start("config: external tools")
-  for _, t in ipairs(executables) do
+  local selected = require("tillervim.profile").selected
+  local function uses(names)
+    return vim.iter(names):any(function(name) return vim.tbl_contains(selected.languages, name) end)
+  end
+  local consumers = { go = { "go" }, cargo = { "rust" }, dart = { "dart" }, flutter = { "dart" },
+    python3 = { "python" }, node = { "typescript", "frontend", "yaml", "json", "bash", "python" } }
+  for _, t in ipairs(vim.tbl_filter(function(tool)
+    if tool[1] == "tmux" then return vim.tbl_contains(selected.ai, "codex") end
+    return not consumers[tool[1]] or uses(consumers[tool[1]])
+  end, executables)) do
     local exe, why, required = t[1], t[2], t[3]
     if vim.fn.executable(exe) == 1 then
       health.ok(("%s found — %s"):format(exe, why))
@@ -82,6 +90,14 @@ function M.check()
       health.error(("%s not found — needed for %s"):format(exe, why))
     else
       health.warn(("%s not found — %s unavailable"):format(exe, why))
+    end
+  end
+  if uses({ "java" }) then
+    local java, reason = require("tillervim.util.jdk").for_jdtls()
+    if java then
+      health.ok("Java runtime for jdtls: " .. java)
+    else
+      health.warn(reason)
     end
   end
   check_tree_sitter()
@@ -97,7 +113,10 @@ function M.check()
     for _, n in ipairs(names) do
       set[n] = true
     end
-    for _, pkg in ipairs(mason_packages) do
+    local owners = { vtsls = { "typescript" }, gopls = { "go" }, prettier = { "json", "yaml", "frontend", "typescript" },
+      jdtls = { "java" }, ["java-debug-adapter"] = { "java" }, ["java-test"] = { "java" },
+      codelldb = { "c", "rust" }, delve = { "go" }, ["js-debug-adapter"] = { "typescript" } }
+    for _, pkg in ipairs(vim.tbl_filter(function(name) return not owners[name] or uses(owners[name]) end, mason_packages)) do
       if set[pkg] then
         health.ok(pkg .. " installed")
       else
@@ -108,7 +127,7 @@ function M.check()
 
   require("agent_workbench.health").check()
   require("git_review.health").check({ retention = require("agent_workbench.review.settings").get().retention })
-  require("llama_service.health").check()
+  if selected.completion == "local" then require("llama_service.health").check() end
 end
 
 return M

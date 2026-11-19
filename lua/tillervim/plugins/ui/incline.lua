@@ -4,14 +4,14 @@ return {
   "b0o/incline.nvim",
   event = { "BufReadPre", "BufNewFile" },
   opts = function()
-    local colors = require("solarized-osaka.colors").setup()
+    local colors = vim.g.colors_name == "solarized-osaka" and require("solarized-osaka.colors").setup()
     return {
-      highlight = {
+      highlight = colors and {
         groups = {
           InclineNormal = { guibg = colors.magenta500, guifg = colors.base04 },
           InclineNormalNC = { guifg = colors.violet500, guibg = colors.base03 },
         },
-      },
+      } or nil,
       window = { margin = { vertical = 0, horizontal = 1 } },
       -- Hide only when the cursor or a Visual selection would sit underneath.
       hide = { cursorline = "smart" },

@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+base=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+config=$base
+if [ "${1:-}" = "--config" ]; then
+  [ "$#" -ge 3 ] || { echo "Expected --config DIRECTORY COMMAND" >&2; exit 2; }
+  config=$(CDPATH= cd -- "$2" && pwd -P)
+  shift 2
+fi
+case "${1:-help}" in
+  help|-h|--help)
+    echo 'tillervim [--config DIR] setup [--defaults | --theme NAME --explorer oil|tree --completion local|off --languages CSV --ai CSV] [--install-core] [--login]'
+    echo 'tillervim [--config DIR] sync | doctor'
+    echo 'Use none for an empty list. setup with no flags opens the wizard.'
+    exit 0 ;;
+  setup|doctor|sync) action=$1; shift ;;
+  *) echo "Unknown command: $1" >&2; exit 2 ;;
+esac
+command -v nvim >/dev/null || { echo 'Install Neovim 0.12.5+ first.' >&2; exit 1; }
+[ -f "$config/init.lua" ] || { echo "Missing $config/init.lua" >&2; exit 1; }
+nvim -u NONE -i NONE -l "$base/configure.lua" "$action" "$config" "$@" || exit $?
+if [ "$action" = sync ]; then
+  cd -- "$config"
+  exec nvim --headless -i NONE -u "$config/init.lua" \
+    '+lua local ok, err = pcall(function() assert(vim.v.errmsg == "", vim.v.errmsg); require("tillervim.sync").run() end); if not ok then io.stderr:write(tostring(err) .. "\n"); vim.cmd("cquit 1") end' '+qa!'
+fi

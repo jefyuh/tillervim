@@ -47,6 +47,7 @@ return {
   {
     "neovim/nvim-lspconfig",
     opts = {
+      tools = { prettier = {} },
       servers = {
         jsonls = {
           -- Inject SchemaStore catalogs via before_init (a real LSP ClientConfig

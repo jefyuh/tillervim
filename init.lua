@@ -14,7 +14,7 @@ require("lazy").setup({
   defaults = { lazy = true, version = false },
   lockfile = root .. "/lazy-lock.json",
   rocks = { enabled = false },
-  install = { colorscheme = { "solarized-osaka" } },
+  install = { colorscheme = { "default" } },
   checker = { enabled = false },
   performance = { rtp = { reset = false, paths = { root }, disabled_plugins = { "gzip", "tarPlugin", "tohtml", "zipPlugin" } } },
 })

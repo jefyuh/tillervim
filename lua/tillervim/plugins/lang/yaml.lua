@@ -11,6 +11,7 @@ return {
   {
     "neovim/nvim-lspconfig",
     opts = {
+      tools = { prettier = {} },
       servers = {
         yamlls = {
           -- See json.lua: before_init is honored by vim.lsp.config; on_new_config is not.

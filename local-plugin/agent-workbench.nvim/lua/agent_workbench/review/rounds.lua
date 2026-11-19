@@ -274,7 +274,7 @@ local group = vim.api.nvim_create_augroup("ai_review_rounds", { clear = true })
 ---@return table|nil entry
 function M.track_terminal(buf, cwd)
   local agent = require("agent_workbench.terminal").agent_of(buf)
-  if not agent then return nil end
+  if agent ~= "codex" and agent ~= "claude" then return nil end
   local current = native[agent]
   if current and current.buf == buf then return current end
   local info = vim.b[buf].agent_workbench or {}

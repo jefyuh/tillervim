@@ -1,3 +1,20 @@
+local profile = require("tillervim.profile")
+local selected = profile.selected.theme
+if selected == "default" then return {} end
+if selected ~= "solarized-osaka" then
+  return {
+    profile.themes[selected],
+    name = ({ catppuccin = "catppuccin", ["rose-pine"] = "rose-pine" })[selected],
+    lazy = false, priority = 1000,
+    config = function(_, opts)
+      if next(opts) then
+        assert(selected ~= "everforest" and selected ~= "nord", selected .. " uses vim.g theme settings in init")
+        require(selected).setup(opts)
+      end
+      vim.cmd.colorscheme(selected)
+    end,
+  }
+end
 return {
 	"craftzdog/solarized-osaka.nvim",
 	lazy = false,

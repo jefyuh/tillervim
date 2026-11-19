@@ -1,5 +1,6 @@
 return {
   "olimorris/codecompanion.nvim",
+  enabled = require("tillervim.profile").companion,
   cmd = {
     "CodeCompanion",
     "CodeCompanionActions",
@@ -61,9 +62,23 @@ return {
       if acp.auth_method then acp_extend[acp.adapter] = { defaults = { auth_method = acp.auth_method } } end
     end
 
+    local adapters = { extend = acp_extend }
+    for _, entry in ipairs(ai.acp) do
+      if entry.adapter == "antigravity" then
+        adapters.antigravity = function()
+          local adapter = require("codecompanion.adapters.acp").extend("gemini_cli", {
+            name = "antigravity", formatted_name = "Antigravity",
+          })
+          adapter.commands = { default = { "agy", "acp" } }
+          adapter.env = {}
+          return adapter
+        end
+      end
+    end
+
     return {
       adapters = {
-        acp = { extend = acp_extend },
+        acp = adapters,
         http = http,
       },
       interactions = {

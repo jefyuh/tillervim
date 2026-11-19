@@ -15,7 +15,7 @@ local api = vim.api
 local INFO, WARN, ERROR = vim.log.levels.INFO, vim.log.levels.WARN, vim.log.levels.ERROR
 
 local function notify(msg, level) vim.notify(msg, level or INFO, { title = "AI" }) end
-local function backend(agent) return require("agent_workbench.backend." .. agent) end
+local backend = require("agent_workbench.backend")
 local function companion() return require("agent_workbench.companion") end
 
 ---A backend's answer, or nil when it raised: one agent's failing question must

@@ -1,6 +1,7 @@
 local function ready(ctx)
   if #vim.lsp.get_clients({ name = "jdtls", bufnr = ctx.bufnr }) == 0 or not require("dap").adapters.java then
-    vim.notify("Wait for jdtls and its Java debug bundle to attach", vim.log.levels.WARN)
+    local _, reason = require("tillervim.util.jdk").for_jdtls()
+    vim.notify(reason or "Wait for jdtls and its Java debug bundle to attach", vim.log.levels.WARN)
     return false
   end
   return true
@@ -110,7 +111,11 @@ return {
         -- the direct start() instead would leave an already-open buffer
         -- unattached, so guard the work rather than the caller.
         if vim.b.java_jdtls_started then return end
-        vim.b.java_jdtls_started = true
+        local java_bin, reason = require("tillervim.util.jdk").for_jdtls()
+        if not java_bin then
+          vim.notify_once(reason, vim.log.levels.WARN)
+          return
+        end
 
         local jdtls = require("jdtls")
         local mason_registry = require("mason-registry")
@@ -157,48 +162,6 @@ return {
 
         -- Lombok
         local lombok_path = jdtls_install .. "/lombok.jar"
-
-        -- jdtls 1.63+ runs only on Java 25: its OSGi bundles require osgi.ee
-        -- JavaSE 25 and the launcher exits 13 on anything older. Projects
-        -- still build at the release level their build files ask for.
-        local jdtls_java = 25
-
-        -- Major version of a JDK home, read from its `release` file.
-        local function java_major(home)
-          local f = io.open(home .. "/release")
-          if not f then return nil end
-          local major = tonumber(f:read("*a"):match('JAVA_VERSION="(%d+)'))
-          f:close()
-          return major
-        end
-
-        -- The first JDK new enough for jdtls: $JAVA_HOME, sdkman's current,
-        -- the newest other sdkman candidate, then the java on PATH, so a
-        -- default left on an older JDK does not take jdtls down with it.
-        local function find_java()
-          local sdkman = vim.fn.expand("~/.sdkman/candidates/java")
-          local homes = { vim.env.JAVA_HOME or "", sdkman .. "/current" }
-          local others = vim.fn.glob(sdkman .. "/*", false, true)
-          table.sort(others, function(a, b) return (java_major(a) or 0) > (java_major(b) or 0) end)
-          vim.list_extend(homes, others)
-          local on_path = vim.fn.exepath("java")
-          if on_path ~= "" then
-            table.insert(homes, vim.fs.dirname(vim.fs.dirname(vim.uv.fs_realpath(on_path) or on_path)))
-          end
-          for _, home in ipairs(homes) do
-            if home ~= "" and (java_major(home) or 0) >= jdtls_java
-              and vim.fn.executable(home .. "/bin/java") == 1 then
-              return home .. "/bin/java"
-            end
-          end
-        end
-
-        local java_bin = find_java()
-        if not java_bin then
-          vim.notify(("jdtls needs JDK %d+; none in $JAVA_HOME or ~/.sdkman/candidates/java"):format(jdtls_java),
-            vim.log.levels.ERROR)
-          return
-        end
 
         local root = require("jdtls.setup").find_root({ "mvnw", "gradlew", "pom.xml", "build.gradle", "build.gradle.kts", ".git" })
           or vim.fs.dirname(vim.api.nvim_buf_get_name(0))
@@ -327,8 +290,10 @@ return {
           -- targets above; no comma-menu duplicate of them.
         end
 
+        vim.b.java_jdtls_started = true
         local ok, err = pcall(jdtls.start_or_attach, vim.tbl_deep_extend("force", config, vim.deepcopy(opts)))
         if not ok then
+          vim.b.java_jdtls_started = nil
           vim.notify("jdtls.start_or_attach error: " .. tostring(err), vim.log.levels.ERROR)
         end
       end

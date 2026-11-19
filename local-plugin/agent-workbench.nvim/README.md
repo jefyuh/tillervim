@@ -1,6 +1,6 @@
 # agent-workbench.nvim
 
-A Codex-first native CLI workbench for Neovim 0.12.5+. It owns the terminal
+A native Codex, Antigravity, Kimi Code and OpenCode CLI workbench for Neovim 0.12.5+. It owns the terminal
 session, context delivery, prompt editor and per-tab chat routing. Claude is a
 future extension; declaring `tui.kind = "claude"` is rejected in this release.
 Historical Claude transcripts remain readable for existing review baselines.
@@ -27,6 +27,8 @@ when choosing Snacks. Missing selected providers fail; there is no automatic
 fallback. The terminal provider and tmux renderer are independent choices.
 External terminals without a Neovim PTY/buffer are not supported in this release.
 
+The additional native kinds use direct embedded PTYs, independent per-kind sessions, and their CLI defaults. Set `native.<kind>.command` and `native.<kind>.args` to override the launch command. Codex owns its tmux renderer, external editor and native review hooks. See the [transport matrix](../../docs/SETUP.md#terminal-and-chat-providers).
+
 ## Options and lifecycle
 
 `setup(opts)` runs once. It copies declarations; dictionaries accept partial
@@ -38,13 +40,13 @@ reconfigure. Session state and the selected HTTP profile are separate live state
 
 | Option | Type / default | Meaning |
 | --- | --- | --- |
-| `providers` | ordered table list; one Codex native entry | Unique `name`, `label`, optional `cli_api_key`, and `tui`, `acp`, `api` parts. Only native `kind = "codex"` is implemented. |
+| `providers` | ordered table list; one Codex native entry | Unique `name`, `label`, optional `cli_api_key`, and `tui`, `acp`, `api` parts. Supported native kinds are `codex`, `antigravity`, `kimi` and `opencode`. |
 | `native.codex.command` | string; `"codex"` | Executable or absolute executable path. |
 | `native.codex.args` | string list; `{ "--no-alt-screen", "--yolo" }` | Base argv, preserved for new/resume/continue. The host's existing execution policy is retained. |
 | `native.codex.wrap_tmux` | boolean; `true` | Frame composition/scrollback wrapper when tmux is installed. `CODEX_WRAP_TMUX` then `vim.g.codex_wrap_tmux` take precedence. |
 | `terminal.provider` | `"native"`, `"snacks"`, provider table; `"native"` | PTY/view owner. |
 | `panel.width` | positive integer; `90` | Native/chat panel width in columns. |
-| `plugin_dirs` | ordered string list; `{}` | Local native plugins; `NVIM_AI_PLUGIN_DIR` overrides this list. Installation happens only at native launch, in a disposable CLI home sharing the plugin cache. |
+| `plugin_dirs` | ordered string list; `{}` | Local native plugins; `NVIM_AI_PLUGIN_DIR` overrides this list. Installation happens only at native Codex launch, in a disposable CLI home sharing the plugin cache. |
 | `integrations.companion` | boolean; `false` | Enable the optional CodeCompanion chat/inline integration. The host installs/configures CodeCompanion. |
 | `integrations.review` | boolean; `false` | Enable prompt hooks and review events. The host supplies git-review.nvim and CodeDiff. |
 | `key_profile` | string; `"auto"` | Startup HTTP profile. Nonempty env `NVIM_AI_KEY_PROFILE` > `vim.g.ai_key_profile` > opts. |

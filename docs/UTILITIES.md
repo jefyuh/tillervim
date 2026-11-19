@@ -196,7 +196,7 @@ argument. Requiring the module changes nothing; `lua/tillervim/bootstrap/setup.l
 checks that the process cwd is available before loading plugins, then applies
 the startup directory at `VimEnter`. An unavailable cwd stops startup with an
 error and exit status 1; it never selects a replacement directory. See
-[Working Directory](#working-directory-utilcwd).
+[Working Directory](#working-directory-tillervimutilcwd).
 
 ### 📝 Logger (`editor_core.logger`)
 
@@ -618,7 +618,7 @@ change. Use `<leader>md` for a manual repair.
 
 Text interpretation is independent of terminal-window placement and focus.
 URL opening and terminal copying share these rules; requiring the module
-installs no handler. `tillervim.config.autocmds` wires `unwrap_yank` to `TextYankPost`.
+installs no handler. `editor_core.autocmds` wires `unwrap_yank` to `TextYankPost`.
 
 ```lua
 local text = require("editor_core.terminal_text")
@@ -1178,8 +1178,7 @@ llama-service also have their own local specs and package README files.
 key_profile and panel. `agent_workbench.options` validates/copies them; lists
 replace, dictionaries partially override and false disables optional behavior.
 `options()` returns a copy. `agent_workbench.state.build(list)` validates and
-derives provider, native agent, key-profile and ACP records. The only implemented
-native kind is codex. Bad providers fail startup naming the provider, rather than
+derives provider, native agent, key-profile and ACP records. Native kinds are `codex`, `antigravity`, `kimi` and `opencode`. The host resolves personal transport selections before calling setup. Bad providers fail startup naming the provider, rather than
 leaving a key that fails later. `_set_providers` is a test seam, not consumer API.
 
 Live state is separate: state.use_key selects an HTTP profile and updates the
@@ -1389,7 +1388,7 @@ The module reads CodeCompanion's internals: `chat.adapter`, `chat.ui`
 (`is_visible`, `is_visible_non_curtab`, `open`, `hide({ keep_window })`,
 `winnr`), `chat.title`, `chat.bufnr`, `chat.id`, `chat.prompt:add`,
 `interactions.chat.open({ ui, winnr })`, the `hidden` chat argument and
-`buf_get_chat()`'s entries; `add_buffer` reads `tillervim.config.can_send_code()`,
+`buf_get_chat()`'s entries; `add_buffer` reads `codecompanion.config.can_send_code()`,
 `interactions.chat.slash_commands.buffer`, the `/buffer` command's module
 (`interactions.shared.slash_commands.buffer`, `new` and `output`) and
 `chat.messages`; `busy` and `add_text` also read
@@ -1525,7 +1524,7 @@ differently.
 ## AI Clipboard (`agent_workbench.clipboard`)
 
 Moves clipboard images between the system, a staging file, and the agent TUI.
-macOS only — it shells out to `osascript`, the same way both agent CLIs do.
+macOS only — it shells out to `osascript`, for the Codex prompt editor.
 
 #### API Reference
 
@@ -1562,6 +1561,12 @@ path containing a quote, backslash or newline is refused — paths are
 interpolated into AppleScript source, which has no equivalent of `shellescape`.
 
 ## Native Agent Launch (`agent_workbench.backend.launch`)
+
+Codex owns the tmux renderer, external prompt editor and native review hook. The
+Antigravity, Kimi Code and OpenCode controllers use `agent_workbench.backend.cli`
+and the same terminal session registry. Their history and model menus belong to
+the CLI. Use an ACP chat for integrated round review with these providers.
+
 
 Codex owns native command construction, tmux lifecycle and teardown. The
 terminal provider owns only its PTY/view; no dependency on claudecode.nvim exists.
@@ -1758,7 +1763,7 @@ local hook = require("agent_workbench.review.hook")
 hook.script() -- absolute bundled agent-hook path
 hook.codex_override() -- one -c hooks table, UserPromptSubmit plus trust state
 hook.codex_trust_hash(event_key, command, timeout) -- sha256:<hex>
-hook.CODEX_TRUST_KEY -- /<session-flags>/tillervim.config.toml:user_prompt_submit:0:0
+hook.CODEX_TRUST_KEY -- /<session-flags>/config.toml:user_prompt_submit:0:0
 hook.event(agent, event, payload_path, done_path) -- RPC receiver status
 ```
 

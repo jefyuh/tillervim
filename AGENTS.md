@@ -6,6 +6,10 @@ TillerVim is an agentic Neovim distribution for Neovim 0.12.5+ written in Lua an
 managed by lazy.nvim. Keep changes small, reversible, lazy-loaded where
 practical, and consistent with the existing LazyVim-style key namespaces.
 
+## Documentation
+
+Keep install, usage, configuration and troubleshooting instructions in the repository. Record design comparisons, proposed alternatives and change-specific acceptance reports in the relevant issue or pull request.
+
 ## Module Responsibilities
 
 - Give each file one clear purpose and group code that changes for the same
@@ -41,8 +45,8 @@ practical, and consistent with the existing LazyVim-style key namespaces.
   Users load `{ "jefyuh/tillervim", import = "tillervim.plugins" }` before their
   own plugin specs. No legacy host module forwarding aliases are provided.
 - `tillervim.plugins` prepares the loader, validates cwd, sets default leaders
-  and registers the distribution. It imports editor, coding, ai, ui, git, lang
-  in that merge order. Unavailable process cwd exits with status 1; new files
+  and registers the distribution. It imports editor, coding, ai, ui and git, then the language modules selected in the personal
+  `tillervim.json` in alphabetical order. A missing profile retains the distribution defaults. Unavailable process cwd exits with status 1; new files
   and missing target parents remain valid startup arguments.
 - Personal `lua/config/options.lua` runs after editor-core defaults and before
   other startup plugins. Personal autocmds/keymaps run once at `User LazyDone`.
@@ -94,13 +98,13 @@ practical, and consistent with the existing LazyVim-style key namespaces.
 
 ## AI Provider Invariants
 
-- This release enables native **Codex only**. No claudecode.nvim dependency,
+- Native terminals support Codex, Antigravity (agy), Kimi Code and OpenCode. The latter three use direct PTYs with independent sessions and have no Codex hook, tmux renderer or transcript format. No claudecode.nvim dependency,
   Claude backend, `:ClaudeCode`, `aa`/`ad` or Oil `aS` key exists. Native Claude
   IDE/proposal support is a later issue. Historical Claude transcript/label
   readers remain for old baselines; they do not enable a native backend.
 - There is no default chat backend. `tillervim.config.ai.providers` is ordered; each
   entry has unique name, label, optional cli_api_key, and one or more parts:
-  `tui={kind="codex"}`, `acp={adapter,command,auth_method?}`, or
+  `tui={kind="codex"|"antigravity"|"kimi"|"opencode"}`, `acp={adapter,command,auth_method?}`, or
   `api={adapter,api_key,name?,label?,model?}`. Omitted parts are not offered.
   The shipped Codex entry offers native terminal, codex-acp with chat-gpt auth,
   and OpenAI HTTP with NVIM_OPENAI_API_KEY. A second HTTP key is another

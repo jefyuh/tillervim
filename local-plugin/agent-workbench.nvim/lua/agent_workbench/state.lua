@@ -14,6 +14,10 @@ local TUI_KINDS = {
   },
 }
 
+for _, kind in ipairs({ "antigravity", "kimi", "opencode" }) do
+  TUI_KINDS[kind] = { command = settings.native[kind].command, capabilities = {} }
+end
+
 -- CodeCompanion's two built-in HTTP adapters, always redirected to an NVIM_*
 -- variable (lua/tillervim/plugins/ai/codecompanion.lua), whichever providers are listed:
 -- a chat restored from history, or any upstream path naming the plain adapter,
@@ -88,7 +92,7 @@ function M.build(list)
   local function optional_string(value, path)
     if value ~= nil and (type(value) ~= "string" or value == "") then fail("%s must be a non-empty string", path) end
   end
-  if type(list) ~= "table" or not vim.islist(list) or #list == 0 then fail("expected a non-empty list") end
+  if type(list) ~= "table" or not vim.islist(list) then fail("expected a list") end
   local out = { providers = list, agents = {}, agent_names = {}, key_profiles = {}, key_names = {}, acp = {} }
   local names, adapters = {}, {}
   for i, p in ipairs(list) do
@@ -276,7 +280,7 @@ function M.backends()
     local ok = vim.fn.executable(a.command) == 1
     all[#all + 1] = {
       id = kind, kind = "native", provider = a.provider, agent = kind, command = a.command,
-      label = a.label .. " · terminal · subscription",
+      label = a.label .. (kind == "codex" and " · terminal · subscription" or " · terminal · CLI account"),
       available = ok, why = not ok and (a.command .. " not found") or nil, warn = warn_of(a.cli_api_key),
     }
   end
@@ -284,7 +288,7 @@ function M.backends()
     local ok = vim.fn.executable(a.command) == 1
     all[#all + 1] = {
       id = "acp:" .. a.adapter, kind = "acp", provider = a.provider, adapter = a.adapter, command = a.command,
-      label = a.label .. " · CodeCompanion ACP · subscription",
+      label = a.label .. (a.adapter == "codex" and " · CodeCompanion ACP · subscription" or " · CodeCompanion ACP · CLI account"),
       available = ok, why = not ok and (a.command .. " not found") or nil, warn = warn_of(a.cli_api_key),
     }
   end
@@ -356,7 +360,7 @@ end
 ---@return string|nil agent the TUI kind
 function M.agent_of_prompt(path)
   for _, kind in ipairs(built.agent_names) do
-    if type(path) == "string" and path:find(M.agents[kind].prompt_pattern) then return kind end
+    if type(path) == "string" and M.agents[kind].prompt_pattern and path:find(M.agents[kind].prompt_pattern) then return kind end
   end
   return nil
 end

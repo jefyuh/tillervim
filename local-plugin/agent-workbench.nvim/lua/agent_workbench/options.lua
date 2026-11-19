@@ -5,7 +5,9 @@ local defaults = {
   key_profile = "auto",
   panel = { width = 90 },
   terminal = { provider = "native" },
-  native = { codex = { command = "codex", args = { "--no-alt-screen", "--yolo" }, wrap_tmux = true } },
+  native = { codex = { command = "codex", args = { "--no-alt-screen", "--yolo" }, wrap_tmux = true },
+    antigravity = { command = "agy", args = {} }, kimi = { command = "kimi", args = {} },
+    opencode = { command = "opencode", args = {} } },
   integrations = { companion = false, review = false },
   plugin_dirs = {},
   callbacks = {},
@@ -30,9 +32,6 @@ function M.setup(opts)
   local value = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts)
   if opts.providers then value.providers = vim.deepcopy(opts.providers) end
   if opts.plugin_dirs then value.plugin_dirs = vim.deepcopy(opts.plugin_dirs) end
-  if opts.native and opts.native.codex and opts.native.codex.args ~= nil then
-    value.native.codex.args = vim.deepcopy(opts.native.codex.args)
-  end
   local function fields(table_value, allowed, path)
     assert(type(table_value) == "table", path .. " must be a table")
     for key in pairs(table_value) do assert(allowed[key], path .. "." .. tostring(key) .. " is not a supported setting") end
@@ -40,15 +39,20 @@ function M.setup(opts)
   fields(value.panel, { width = true }, "agent_workbench.panel")
   fields(value.terminal, { provider = true }, "agent_workbench.terminal")
   fields(value.integrations, { companion = true, review = true }, "agent_workbench.integrations")
-  fields(value.native, { codex = true }, "agent_workbench.native")
-  fields(value.native.codex, { command = true, args = true, wrap_tmux = true }, "agent_workbench.native.codex")
+  fields(value.native, defaults.native, "agent_workbench.native")
+  for kind, native in pairs(value.native) do
+    local path = "agent_workbench.native." .. kind
+    fields(native, defaults.native[kind], path)
+    local args = vim.tbl_get(opts, "native", kind, "args")
+    if args ~= nil then native.args = vim.deepcopy(args) end
+    assert(type(native.command) == "string" and native.command ~= "", path .. ".command must name an executable")
+    assert(vim.islist(native.args), path .. ".args must be an argv list")
+    for _, arg in ipairs(native.args) do assert(type(arg) == "string", path .. ".args must contain strings") end
+  end
   for key, enabled in pairs(value.integrations) do
     assert(type(enabled) == "boolean", "agent_workbench.integrations." .. key .. " must be boolean")
   end
   assert(type(value.key_profile) == "string" and value.key_profile ~= "", "agent_workbench.key_profile must be a profile name")
-  assert(type(value.native.codex.command) == "string" and value.native.codex.command ~= "", "agent_workbench.native.codex.command must name an executable")
-  assert(vim.islist(value.native.codex.args), "agent_workbench.native.codex.args must be an argv list")
-  for i, arg in ipairs(value.native.codex.args) do assert(type(arg) == "string", "agent_workbench.native.codex.args[" .. i .. "] must be a string") end
   assert(type(value.native.codex.wrap_tmux) == "boolean", "agent_workbench.native.codex.wrap_tmux must be boolean")
   assert(vim.islist(value.plugin_dirs), "agent_workbench.plugin_dirs must be an ordered list")
   for i, dir in ipairs(value.plugin_dirs) do assert(type(dir) == "string" and dir ~= "", "agent_workbench.plugin_dirs[" .. i .. "] must be a directory path") end

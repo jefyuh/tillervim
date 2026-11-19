@@ -414,7 +414,7 @@ query and Normal-mode `<C-w>` makes the project the tab's directory (`:tcd`).
 
 ### Browsing
 
-There is no tree sidebar. Directories are browsed and edited through oil,
+Select `tree` in setup for Snacks Explorer on `-`, `;o` and dashboard Browse files. The directory editing keys below apply to the default Oil profile. See the [profile and AI transport guide](SETUP.md). By default directories are browsed and edited through oil,
 and files are reached through the pickers above.
 
 | Key | Does |
@@ -958,10 +958,9 @@ were showing.
 Use `<C-/>` for numbered shell terminals and `<Space>an` for a new AI chat.
 `,1`–`,9` choose terminals in Normal mode; they never close one by repeating the
 number. `<Space>al` switches AI chats, `<Space>ac` hides/restores the last one,
-`<Space>af` focuses it, and `<Space>ai` opens its prompt editor.
+`<Space>af` focuses it, and `<Space>ai` composes in the selected terminal or chat.
 
-The native backend in this release is Codex. CodeCompanion adds Codex ACP and
-OpenAI HTTP chats. `<Space>an` shows transport and billing; a running native
+Native terminals include Codex, Antigravity, Kimi Code and OpenCode. Each also offers an optional ACP entry. OpenAI HTTP is selected separately. See the [transport matrix](SETUP.md#terminal-and-chat-providers). `<Space>an` shows transport and billing; a running native
 entry reuses the session. Showing one target hides the others in this tab only,
 keeping their buffers/processes. A target shown in another tab is gone to with
 a notice. A terminal copy shown here remains the delivery target here. The
@@ -980,10 +979,9 @@ for Codex's own attachment path after the editor closes. An editor request
 from a different program has no agent owner and takes no agent seed or image.
 `ar` resumes, `aR` continues, `am` chooses a model. On a running session these
 focus it and type nothing, protecting drafts and approvals. `at`/`aT` read
-native JSONL transcripts independently of terminal scrollback.
+Codex JSONL transcripts independently of terminal scrollback.
 
-`lua/tillervim/config/ai.lua` declares providers, HTTP profile, panel, native argv, local
-plugin paths and terminal provider. `terminal.provider` may be `native`,
+Select transports in personal `tillervim.json`. For custom providers, HTTP profiles, panel width, native argv or plugin paths, set `agent-workbench.nvim` options in personal `lua/plugins/`. `terminal.provider` may be `native`,
 `snacks` or a custom embedded adapter. tmux frame composition is independent;
 `CODEX_WRAP_TMUX=0` disables it. Its runner/watchdog/teardown preserve startup
 errors, CJK and scrollback and clean owned descendants. No CLI config is written.
@@ -991,14 +989,14 @@ errors, CJK and scrollback and clean owned descendants. No CLI config is written
 `<Space>ae` uses HTTP API credits; `<Space>ax` / `:AI key` switches that profile
 for this process, without touching terminals or existing chats. Defaults use
 OpenAI's `NVIM_OPENAI_API_KEY`; a CLI's `OPENAI_API_KEY` can change its billing
-and produces a warning. ACP uses `chat-gpt` authentication. No key is silently
-borrowed from a CLI variable. More detail: [AI keys](../README.md#ai-keys).
+and produces a warning. Codex ACP uses `chat-gpt` authentication. No key is silently
+borrowed from a CLI variable. More detail: [AI keys](../README.md#everyday-keys).
 
 ### Local native plugins
 
-Set `plugin_dirs` in `config/ai.lua`, or override with `NVIM_AI_PLUGIN_DIR`.
+Set `opts.plugin_dirs` on the personal `agent-workbench.nvim` spec, or override with `NVIM_AI_PLUGIN_DIR`.
 Entries can be plugin directories or distribution roots with `codex/<plugin>`
-packages. Resolution happens at native launch; nothing installs at startup or
+packages. Resolution happens at native Codex launch; nothing installs at startup or
 for CodeCompanion. Codex refreshes local snapshots through `plugin add` using
 a disposable `CODEX_HOME` sharing only the real plugin cache. Marketplace and
 enabled overrides are invocation-local; global enablement/config stay intact.
@@ -1008,6 +1006,8 @@ enabled overrides are invocation-local; global enablement/config stay intact.
 | Workflow | Transport / billing | Use |
 | --- | --- | --- |
 | Native Codex | Native CLI / ChatGPT login | Full CLI TUI and prompt editor |
+| Antigravity, Kimi Code, OpenCode terminals | Embedded CLI / CLI account | Interactive sessions, file references and draft text |
+| Other ACP chats | CodeCompanion / provider account | Chat and integrated review with the chosen agent |
 | Codex ACP chat | CodeCompanion + `codex-acp` / ChatGPT login | Chat UI with CLI tools |
 | OpenAI API chat / inline | HTTP / API credits | Chat or `<Space>ae` inline edits |
 
@@ -1017,7 +1017,7 @@ resuming an agent's ACP session with `/resume` are separate things.
 
 Ghost text is a fourth, independent service: a local llama-server, enabled only
 with a UI and eligible file. `<C-l>` accepts the suggestion; ignoring it simply
-continues typing. `config/completion.lua` owns model/service preferences;
+continues typing. Set `completion` in the profile and configure the model and service through the `llama-service.nvim` spec;
 Minuet's native `opts.virtualtext.keymap.accept` owns its accept key. Markdown/text/commit messages are
 excluded by default; `:Minuet virtualtext toggle` changes the current buffer.
 
@@ -1420,8 +1420,7 @@ for module launch replace `program` with `module`. See the
 
 ### Java
 
-Install JDK 25+ (jdtls runs on it; projects may target older releases) and
-Mason's `jdtls`, `java-debug-adapter`, and `java-test`.
+Enable `java` and run `tillervim sync` to install the editor tools. With only JDK 17, editing and highlighting work. To enable jdtls and Java debugging, provide JDK 25+ alongside the project JDK, save the Java buffer and run `:edit`.
 Open the project and wait for jdtls to finish importing. `dc` discovers main
 classes; `df` selects the main class corresponding to the current file.
 An empty static main-class list before discovery is normal. Each project uses

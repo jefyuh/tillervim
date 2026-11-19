@@ -3,9 +3,7 @@ local M = {}
 local config
 
 ---@param name string an agent (TUI kind, a key of ai.state.agents)
-local function backend(name)
-  return require("agent_workbench.backend." .. name)
-end
+local backend = require("agent_workbench.backend")
 
 local function label_of(name)
   local agent = config.agents[name]
@@ -306,6 +304,7 @@ local function transcript_key(method)
   return function()
     return guard("AI", "transcript", function()
       slot().native_target(function(agent)
+        if agent ~= "codex" then return notify("Use session history inside " .. label_of(agent)) end
         guard(label_of(agent), "transcript", function() require("agent_workbench.transcript")[method](agent) end)
       end, { prompt = "Whose transcript?" })
     end)

@@ -33,6 +33,7 @@ return {
     build = ":TSUpdate",
     -- `opts` lists are replaced (not merged) by lazy unless extended here, so
     -- parsers contributed by lang/*.lua accumulate instead of clobbering.
+    opts = { ensure_installed = ensure_installed },
     opts_extend = { "ensure_installed" },
     config = function(_, opts)
       local nts = require("nvim-treesitter")
@@ -40,18 +41,7 @@ return {
         install_dir = vim.fn.stdpath("data") .. "/site",
       })
 
-      -- Merge the baseline list with parsers contributed by language modules
-      -- (lang/*.lua add them through `opts.ensure_installed`), de-duplicating
-      -- so a parser listed in both places is only requested once.
-      local want, seen = {}, {}
-      for _, list in ipairs({ ensure_installed, opts.ensure_installed or {} }) do
-        for _, p in ipairs(list) do
-          if not seen[p] then
-            seen[p] = true
-            table.insert(want, p)
-          end
-        end
-      end
+      local want = opts.ensure_installed or {}
 
       -- Install any missing parsers from the desired list (async).
       local installed = {}

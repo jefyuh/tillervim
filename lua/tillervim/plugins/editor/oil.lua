@@ -1,3 +1,15 @@
+if require("tillervim.profile").selected.explorer == "tree" then
+  local function browse()
+    Snacks.explorer({ cwd = require("tillervim.util.cwd").buffer_dir() })
+  end
+  return {
+    "folke/snacks.nvim",
+    keys = {
+      { "-", browse, desc = "Parent directory (tree)" },
+      { ";o", browse, desc = "File manager (tree)" },
+    },
+  }
+end
 -- Directory-as-buffer file management.
 --
 -- netrw is disabled in local-plugin/editor-core.nvim/lua/editor_core/options.lua, so until now a directory buffer landed
@@ -7,7 +19,7 @@
 -- move the file; write a new line to create one. Changes are staged until `:w`,
 -- which shows the resulting shell-level operations for confirmation.
 --
--- This is the only directory view in the config: there is no tree sidebar.
+-- This branch owns directory browsing when Oil is selected.
 -- Pickers (`;f`, `;/`, ...) answer "which file do I want"; oil answers "what
 -- is in this directory" and "change these files", then closes again.
 local function open_oil(floating)

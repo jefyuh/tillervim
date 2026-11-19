@@ -16,17 +16,13 @@ TillerVim 把编辑、原生 Agent、聊天与 Git Review 放进同一个 Neovim
 - **编辑能力**：Oil、Snacks、Treesitter、LSP、补全、格式化、调试和分语言运行器。
 - **可选本地灰字**：Minuet 与内置 llama-service。只有附着 UI 且打开合适文件时才启动模型，headless 不加载模型。
 
-当前原生后端只有 Codex。聊天、HTTP 和本地补全与原生终端独立。
-Setup 不启动 Agent、聊天、Review 基线或模型。
+原生终端支持 Codex、Antigravity、Kimi Code 和 OpenCode。每种终端和 ACP 聊天都能独立选择。主题、Snacks 文件树、语言包、依赖与授权流程见[初始化与个人配置](docs/SETUP_CN.md)。
 
 ## 依赖
 
-基础要求为 Neovim **0.12.5+**、Git、ripgrep，以及使用 Nerd Font 的终端。
-语言功能依赖各自工具链；Treesitter 构建需要 C 编译器和 tree-sitter-cli **0.26.1+**。
+准备 Neovim **0.12.5+**、Git 和 ripgrep。同步 Treesitter 解析器需要 C 编译器和 tree-sitter CLI **0.26.1+**。Nerd Font 用于显示图标。选择语言模块后，再按项目准备 SDK。
 
-原生终端需要安装并登录 `codex`，`tmux` 用于默认的帧包装。
-ACP 聊天额外需要 `codex-acp`；HTTP 聊天读取 `NVIM_OPENAI_API_KEY`，与 CLI 凭证分开。
-用 `:checkhealth tillervim` 查看完整依赖报告。
+只准备所选 AI 入口对应的 CLI 和账号。Codex 原生终端使用 `codex`，其 tmux 渲染可选；Codex ACP 单独使用 `codex-acp`。OpenAI HTTP 读取 `NVIM_OPENAI_API_KEY`。其他入口的命令与授权方式见[初始化手册](docs/SETUP_CN.md)。
 
 ## 安装
 
@@ -37,6 +33,8 @@ tillervim_source="$(mktemp -d)"
 git clone --depth 1 https://github.com/jefyuh/tillervim.git "$tillervim_source"
 mkdir -p ~/.config/nvim
 cp -R "$tillervim_source/starter/." ~/.config/nvim/
+~/.config/nvim/bin/tillervim setup
+~/.config/nvim/bin/tillervim sync
 nvim
 ```
 
@@ -64,7 +62,11 @@ localleader 默认为逗号。
 ```text
 ~/.config/nvim/
 ├── init.lua
-├── bootstrap.lua      # Early loader/cwd validation
+├── bootstrap.lua      # 启动检查
+├── bin/tillervim      # setup、sync、doctor
+├── configure.lua      # 在加载插件前运行引导和诊断
+├── profile.lua        # starter 的预设清单与校验
+├── tillervim.json     # setup 保存的个人选择
 ├── lua/config/
 │   ├── lazy.lua       # 插件管理和 import
 │   ├── options.lua    # 默认编辑器设置之后应用 vim.opt / vim.g

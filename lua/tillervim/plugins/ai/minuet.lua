@@ -65,6 +65,7 @@ end
 
 return {
   "milanglacier/minuet-ai.nvim",
+  enabled = require("tillervim.profile").selected.completion == "local",
   event = "InsertEnter",
   cmd = "Minuet",
   opts = function()

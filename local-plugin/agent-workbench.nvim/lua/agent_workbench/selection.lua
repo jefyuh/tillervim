@@ -67,8 +67,8 @@ function M.draft()
 end
 
 -- A directory listing contains names rather than selected source code.
--- Oil is the only listing here; its selections are refused by the facade.
-local TREE_FILETYPES = { oil = true }
+-- A listing or picker is a navigation surface, not source text.
+local TREE_FILETYPES = { oil = true, snacks_picker_list = true, snacks_picker_input = true }
 
 ---A selection taken whole, before anything asks where it goes.
 ---

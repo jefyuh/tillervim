@@ -31,16 +31,38 @@ return {
     { "<leader>av", function() require("agent_workbench").review() end, mode = "n", desc = "Review changes since round baseline" },
     { "<leader>aV", function() require("agent_workbench").new_round() end, mode = "n", desc = "Start review round" },
     { "<leader>ax", "<cmd>AI key<cr>", desc = "Switch API key profile…" },
-    { "<leader>ao", "<cmd>CodeCompanionHistory<cr>", desc = "Browse saved Companion chats" },
+    { "<leader>ao", require("tillervim.profile").companion and "<cmd>CodeCompanionHistory<cr>" or false, desc = "Browse saved Companion chats" },
     { "<leader>ae", inline, mode = { "n", "x" }, expr = true, silent = false, desc = "Inline edit…" },
   },
   opts = function()
     local opts = vim.deepcopy(require("tillervim.config.ai"))
+    local codex = opts.providers[1]
+    local parts = { codex = "tui", ["codex-acp"] = "acp", openai = "api" }
+    local profile = require("tillervim.profile")
+    opts.providers = {}
+    local groups = {}
+    for _, id in ipairs(profile.selected.ai) do
+      local name = parts[id] and "codex" or id:gsub("%-acp$", "")
+      local bridge = profile.bridges[name]
+      if not groups[name] then
+        groups[name] = { name = name, label = bridge and bridge.label or codex.label }
+        table.insert(opts.providers, groups[name])
+      end
+      local group = groups[name]
+      if parts[id] then
+        group[parts[id]] = codex[parts[id]]
+        if id ~= "openai" then group.cli_api_key = codex.cli_api_key end
+      elseif id == name then
+        group.tui = { kind = name }
+      else
+        group.acp = { adapter = bridge.adapter, command = bridge.command }
+      end
+    end
     local git = require("tillervim.util.settings").git()
     opts.review = vim.tbl_deep_extend("force", vim.deepcopy(require("tillervim.config.review")), {
       max_file_size = git.max_file_size, history_limit = git.history_limit, retention = { saved = git.retention.saved },
     })
-    opts.integrations = { companion = true, review = true }
+    opts.integrations = { companion = profile.companion, review = true }
     opts.callbacks = {
       project_root = require("tillervim.util.cwd").project_root,
       editor_win = function() return require("editor_core.window").editor_win() end,

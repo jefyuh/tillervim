@@ -91,7 +91,7 @@ local function refused(list, text, label)
   local ok, err = pcall(state.build, list)
   t.ok(not ok and tostring(err):find(text, 1, true), label .. ": " .. tostring(err))
 end
-refused({}, "non-empty", "empty provider list")
+t.eq(state.build({}).agent_names, {}, "empty provider list disables chat entry points")
 refused({ fixture[1], fixture[1] }, "listed twice", "duplicate provider name")
 local duplicate = vim.deepcopy(fixture[1]); duplicate.name = "other"
 refused({ fixture[1], duplicate }, 'tui kind "codex" is already offered', "duplicate native kind")

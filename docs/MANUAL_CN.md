@@ -362,7 +362,7 @@ Nvim 把这个上一个 buffer 称为 **alternate buffer（交替缓冲区）**�
 
 ### 浏览
 
-没有文件树侧栏：目录一律用 oil 浏览和编辑，文件一律用上面的 picker 到达。
+默认使用 Oil 编辑目录。选择 `explorer = "tree"` 后，`-`、`;o` 和首页“Browse files”打开 Snacks 文件树。下面的目录编辑键适用于 Oil。见[个人配置与 AI 入口](SETUP_CN.md)。
 
 | 键 | 作用 |
 |---|---|
@@ -832,7 +832,7 @@ index 那一侧有未保存的修改时不会关闭：在那里 `:w` 会暂存�
 `,1`–`,9` 选择编号，再按不会关闭。`al` 切 chat，`ac` 隐藏/恢复上次 chat，
 `af` 聚焦，`ai` 编辑 prompt。
 
-本期原生后端是 Codex；CodeCompanion 提供 Codex ACP 和 OpenAI HTTP chat。
+原生终端支持 Codex、Antigravity、Kimi Code 和 OpenCode。四种终端均有可单独选择的 ACP 入口，OpenAI HTTP 另选。见[终端与聊天配置](SETUP_CN.md)。
 `an` 列出传输方式、计费和可用性；运行中的原生入口复用同一会话。显示一个目标只隐藏
 本 tab 的其他 AI 窗口，保留 buffer 和进程。目标在其他 tab 可见时跳转并提示。
 本 tab 显示的终端副本仍是此处的投递目标。唯一普通窗口不能隐藏，浮窗不算额外窗口。
@@ -846,22 +846,22 @@ HTTP chat 接收 buffer 文本。目录列表明确拒绝，本期没有 Claude 
 `<C-d>` 返回，取消保留原输入。`<C-v>` 暂存图片，在 editor 关闭后交给 Codex 自身
 的附件通道。其他程序的 editor 请求没有 agent owner，不接受 seed 或图片。
 `ar` 恢复，`aR` 继续，`am` 选模型；会话运行时只聚焦，不向可能含草稿或审批的输入框
-写入命令。`at`/`aT` 阅读 JSONL transcript，独立于终端滚动历史。
+写入命令。`at`/`aT` 阅读 Codex JSONL transcript，独立于终端滚动历史。
 
-`config/ai.lua` 声明 provider、HTTP profile、面板、原生 argv、本地插件目录和 terminal。
+个人 `tillervim.json` 选择入口。自定义 provider、HTTP profile、面板宽度、启动参数和本地插件目录在个人 `lua/plugins/` 的 `agent-workbench.nvim` spec 中配置。
 `terminal.provider` 可为 `native`、`snacks` 或自定义内嵌 adapter。tmux 渲染独立选择，
 `CODEX_WRAP_TMUX=0` 关闭。runner/watchdog/teardown 保留启动错误、CJK、滚动历史，
 清理所属后代进程；不写 CLI 配置。
 
 `ae` 消耗 HTTP API credits；`ax` / `:AI key` 只切当前进程的 HTTP profile，
 不动终端和已有 chat。默认 OpenAI key 为 `NVIM_OPENAI_API_KEY`；CLI 自己的
-`OPENAI_API_KEY` 可能改变计费并会提示。ACP 使用 `chat-gpt` 登录，不静默借用 CLI key。
-详见 [AI 快捷键](../README_CN.md#ai-快捷键)。
+`OPENAI_API_KEY` 可能改变计费并会提示。Codex ACP 使用 `chat-gpt` 登录，不静默借用 CLI key。
+详见 [AI 快捷键](../README_CN.md#常用按键)。
 
 ### 原生终端的本地插件
 
-`config/ai.lua` 的 `plugin_dirs` 声明目录，`NVIM_AI_PLUGIN_DIR` 覆盖。
-入口可为插件目录或带 `codex/<plugin>` 的分发根目录。只在原生启动时解析，
+个人 `agent-workbench.nvim` spec 的 `opts.plugin_dirs` 声明目录，`NVIM_AI_PLUGIN_DIR` 覆盖。
+入口可为插件目录或带 `codex/<plugin>` 的分发根目录。只在启动原生 Codex 时解析，
 不在 Nvim 启动或 CodeCompanion 启动时安装。Codex 使用临时 `CODEX_HOME` 运行
 `plugin add` 刷新快照，仅共享真实 plugin cache；marketplace/enabled 覆盖只属于本次调用，
 不改变用户配置和全局启用状态。
@@ -871,6 +871,8 @@ HTTP chat 接收 buffer 文本。目录列表明确拒绝，本期没有 Claude 
 | 工作流 | 传输 / 计费 | 用途 |
 | --- | --- | --- |
 | 原生 Codex | 原生 CLI / ChatGPT 登录 | 完整 TUI 和 prompt editor |
+| Antigravity、Kimi Code、OpenCode 终端 | 内嵌 CLI / 对应账号 | 交互会话、文件引用、草稿文本 |
+| 其他 ACP 聊天 | CodeCompanion / 对应账号 | 使用所选 Agent 聊天和审阅 |
 | Codex ACP chat | CodeCompanion + codex-acp / ChatGPT 登录 | 带 CLI 工具的 chat UI |
 | OpenAI API chat / inline | HTTP / API credits | 对话或 `ae` 行内编辑 |
 
@@ -878,7 +880,7 @@ Picker 标明区别和可用性。HTTP key 读取 `NVIM_*`；chat 创建后 adap
 本地 transcript history 与 `/resume` 恢复 ACP agent 有状态会话是两回事。
 
 幽灵文本是独立的第四条路径：本地 llama-server，只在附着 UI 且文件符合条件时启动。
-`<C-l>` 接受，不理它就继续打字。`config/completion.lua` 管模型和服务偏好，
+`<C-l>` 接受，不理它就继续打字。个人清单的 `completion` 控制灰字开关，`llama-service.nvim` spec 管模型和服务偏好，
 Minuet 原生的 `opts.virtualtext.keymap.accept` 管接受键。Markdown/text/commit 默认排除；
 `:Minuet virtualtext toggle` 切换当前 buffer。
 
@@ -1219,8 +1221,7 @@ python -m debugpy --listen 127.0.0.1:5678 --wait-for-client -m pytest tests/test
 
 ### Java
 
-安装 JDK 25+（jdtls 运行在它上面；项目本身仍可以面向更早的版本），并在 Mason 中安装
-`jdtls`、`java-debug-adapter`、`java-test`。
+选择 `java` 后运行 `tillervim sync` 安装编辑器工具。只有 JDK 17 时仍可编辑和高亮。并行安装 JDK 25+ 后，保存 Java 缓冲区并执行 `:edit`，即可启用 jdtls 和 Java 调试。项目构建可继续使用原 JDK。
 打开项目，等待 jdtls 导入完成。`dc` 动态发现主类，`df` 选择当前文件对应的
 主类；发现前没有静态主类列表是正常的。每个项目使用独立的 jdtls workspace。
 `tM`/`tF` 调试最近的方法或第一个发现的测试类。
