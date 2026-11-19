@@ -1,6 +1,6 @@
 return {
   "MeanderingProgrammer/render-markdown.nvim",
-  ft = { "markdown", "codecompanion" },
+  ft = { "markdown", "markdown.gh", "codecompanion" },
   dependencies = {
     "nvim-treesitter/nvim-treesitter",
     "nvim-tree/nvim-web-devicons",
@@ -10,5 +10,8 @@ return {
     { "<localleader>m", "<cmd>RenderMarkdown toggle<cr>", desc = "Toggle Markdown render", mode = "n",
       ft = { "markdown", "codecompanion" } },
   },
-  opts = {},
+  opts = {
+    -- FileType attaches before Snacks requests its first render. Keep its GitHub view settings.
+    overrides = { filetype = { ["markdown.gh"] = { render_modes = true, bullet = { enabled = false } } } },
+  },
 }
