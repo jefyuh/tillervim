@@ -76,6 +76,29 @@ function M.new(kind)
     if modified then vim.notify("File references use the saved file", vim.log.levels.WARN) end
     backend.send_text("@" .. (vim.fs.relpath(session.root, path) or path) .. " ")
   end
+  function backend.attach_images(paths)
+    local function discard()
+      for _, png in ipairs(paths or {}) do vim.fn.delete(png) end
+    end
+    if not backend.running() then
+      vim.notify("Agent terminal is gone; images were not attached", vim.log.levels.WARN)
+      discard()
+      return
+    end
+    local channel = session.buf and vim.api.nvim_buf_is_valid(session.buf) and vim.bo[session.buf].channel
+    if not channel or channel <= 0 then
+      vim.notify("Agent terminal is not ready; images were not attached", vim.log.levels.WARN)
+      discard()
+      return
+    end
+    require("agent_workbench.clipboard").attach(channel, paths, function()
+      if session and session.buf and vim.api.nvim_buf_is_valid(session.buf)
+        and require("agent_workbench.image_preview").adopt_terminal(session.buf, paths) then
+        return
+      end
+      discard()
+    end)
+  end
   function backend.edit_prompt(opts)
     if opts and (opts.on_consumed or opts.on_expired) then
       if opts.on_expired then opts.on_expired() end

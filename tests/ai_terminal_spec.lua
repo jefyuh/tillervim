@@ -225,7 +225,7 @@ t.eq(require("agent_workbench").session_of_buffer(plain).kind, "codex", "host UI
 -- still gets the click guard.
 do
   local defaults = require("agent_workbench").options().native.antigravity
-  t.eq(defaults.args, { "--settings", '{"altScreenMode":true}' },
+  t.eq(defaults.args, { "--settings", '{"altScreenMode":"always"}' },
     "Antigravity defaults to session-only altScreenMode to prevent inline cursor flicker")
 
   local prev = config.agents.antigravity
@@ -248,7 +248,7 @@ do
     return term.buf
   end
 
-  local agy_alt = open_kind("antigravity", { "agy", "--settings", '{"altScreenMode":true}' })
+  local agy_alt = open_kind("antigravity", { "agy", "--settings", '{"altScreenMode":"always"}' })
   t.eq(vim.fn.maparg("<Esc>", "t", false, true).buffer, 1, "Antigravity altscreen still passes Esc through")
   t.ok(not buffer_local("<LeftMouse>"), "Antigravity altscreen leaves mouse clicks to the TUI")
   t.ok(not buffer_local("<ScrollWheelDown>"), "Antigravity altscreen leaves wheel-down to the TUI")

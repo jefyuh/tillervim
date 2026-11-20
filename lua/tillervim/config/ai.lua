@@ -7,7 +7,7 @@ return {
   terminal = { provider = "snacks" },
   native = {
     codex = { args = { "--no-alt-screen", "--yolo" }, wrap_tmux = true },
-    antigravity = { args = { "--settings", '{"altScreenMode":true}' } },
+    antigravity = { args = { "--settings", '{"altScreenMode":"always"}' } },
   },
   -- HTTP profile for inline edits and command prompts, not for new chats.
   -- "auto": the first provider API whose key is configured, else the first API.

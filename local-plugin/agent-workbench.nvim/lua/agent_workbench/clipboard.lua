@@ -55,7 +55,7 @@ function M.has_image()
   local result = osascript({ "clipboard info" })
   return result.code == 0
     and result.stdout ~= nil
-    and result.stdout:find("PNGf", 1, true) ~= nil
+    and (result.stdout:find("PNGf", 1, true) ~= nil or result.stdout:find("TIFF", 1, true) ~= nil)
 end
 
 ---Write the clipboard image to `path` as PNG.

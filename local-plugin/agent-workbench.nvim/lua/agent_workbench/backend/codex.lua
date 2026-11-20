@@ -297,7 +297,12 @@ function M.attach_images(paths)
     return
   end
 
-  require("agent_workbench.clipboard").attach(channel, paths, discard)
+  require("agent_workbench.clipboard").attach(channel, paths, function()
+    if valid(term) and require("agent_workbench.image_preview").adopt_terminal(term.buf, paths) then
+      return
+    end
+    discard()
+  end)
 end
 
 ---Ask the TUI to open its own prompt editor, seeding the input box first when

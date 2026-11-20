@@ -394,7 +394,7 @@ old fixture or document; Claude protocol support is a later extension.
   code review is disabled so it cannot create a second baseline system.
 - **Rendering/scrolling/cleanup.** The Codex wrapper composes TUI synchronized
   updates in tmux; `opts.native.codex.wrap_tmux = false` gives a direct comparison. Antigravity
-  defaults to session-only `--settings '{"altScreenMode":true}'` so its TUI
+  defaults to session-only `--settings '{"altScreenMode":"always"}'` so its TUI
   renders on the alternate screen without inline scrollback cursor jumps and
   handles wheel scrolling within its own viewport; Normal-mode downward
   scrolling in `:terminal` windows is also clamped at the bottom row so

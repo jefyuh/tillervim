@@ -1706,9 +1706,17 @@ pending feedback in that slot and leaves the durable review draft intact.
 
 `<C-v>` stages the clipboard image through `agent_workbench.clipboard` and nothing is written
 into the buffer — the prompt file is plain markdown, and only the CLI can put
-image bytes into its request. On return, the staged files are replayed through
-the TUI's own `ctrl+v` (`agent_workbench.attach_images`), and the CLI writes its own
-`[Image #N]` marker. They go to the agent that owns the prompt, read from the
+image bytes into its request. While staged, `agent_workbench.image_preview`
+renders a non-focusable companion thumbnail card alongside the prompt float via
+`Snacks.image` (falling back to a 1-row `[Image #N]` badge when terminal graphics
+are unavailable; `<M-p>` / `,p` toggles fold, `<M-n>` / `]i` / `[i` cycles). On return, the staged files are replayed through
+the TUI's own `ctrl+v` (`agent_workbench.attach_images`), the CLI writes its own
+`[Image #N]` marker, and `image_preview.adopt_terminal` transfers the preview card
+to the target panel until submitted. Direct `<C-v>` pastes inside native terminal
+panels (`codex`, `antigravity`, `kimi`, `opencode`) snapshot the clipboard PNG,
+forward `0x16` to the PTY, and display the same top-right thumbnail card and
+`[Image #N]` badge (`<M-p>` / `,p` fold, `<M-x>` / `,P` clear, auto-dismissed on
+`<CR>` / `<C-c>`). They go to the agent that owns the prompt, read from the
 temp path its CLI chose (`agent_workbench.state.agent_of_prompt`: current Codex
 uses `$CODEX_HOME/editor/*.md`), so a Codex prompt hands its images
 to Codex whatever is on the right. The float's title names the same owner. A

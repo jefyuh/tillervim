@@ -843,8 +843,8 @@ HTTP chat 接收 buffer 文本。目录列表明确拒绝，本期没有 Claude 
 从 CodeDiff 使用 chat 键时，作用于来源 tab。
 
 `ai` 通过 Codex 的 `ctrl+g` 和 `$EDITOR` 把真实输入草稿交给本 Nvim。
-`<C-d>` 返回，取消保留原输入。`<C-v>` 暂存图片，在 editor 关闭后交给 Codex 自身
-的附件通道。其他程序的 editor 请求没有 agent owner，不接受 seed 或图片。
+`<C-d>` 返回，取消保留原输入。`<C-v>` 暂存图片并在编辑窗旁弹出 `Snacks.image` 真实缩略图预览（`<M-p>` / `,p` 折叠为紧凑 `[Image #N]` 徽章，`<M-n>` / `]i` / `[i` 切换多图），在 editor 关闭后交给 Codex 自身
+的附件通道并同步到终端面板预览。在任意原生终端面板（`codex`、`agy`、`kimi`、`opencode`）中直接按 `<C-v>` 贴图时，同样会在面板右上角挂出不抢焦点的缩略图与醒目 `[Image #N]` 徽章（`<M-p>` / `,p` 折叠，`<M-x>` / `,P` 关闭，`<CR>` 提交或 `<C-c>` 取消时自动清理）。其他程序的 editor 请求没有 agent owner，不接受 seed 或图片。
 `ar` 恢复，`aR` 继续，`am` 选模型；会话运行时只聚焦，不向可能含草稿或审批的输入框
 写入命令。`at`/`aT` 阅读 Codex JSONL transcript，独立于终端滚动历史。
 

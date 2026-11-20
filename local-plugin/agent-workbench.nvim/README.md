@@ -27,7 +27,7 @@ when choosing Snacks. Missing selected providers fail; there is no automatic
 fallback. The terminal provider and tmux renderer are independent choices.
 External terminals without a Neovim PTY/buffer are not supported in this release.
 
-The additional native kinds use direct embedded PTYs, independent per-kind sessions, and their CLI defaults. Set `native.<kind>.command` and `native.<kind>.args` to override the launch command. Codex owns its tmux renderer, external editor and native review hooks. See the [transport matrix](../../docs/SETUP.md#terminal-and-chat-providers).
+The additional native kinds use direct embedded PTYs, independent per-kind sessions, and their CLI defaults. Set `native.<kind>.command` and `native.<kind>.args` to override the launch command. Codex owns its tmux renderer, external editor and native review hooks. When a UI is attached, `<C-v>` in native agent panels and the prompt editor renders non-focusable `[Image #N]` thumbnail cards (via optional `Snacks.image` when present, or a compact badge fallback; `<M-p>` folds, `<M-n>` cycles, `<M-x>` clears). See the [transport matrix](../../docs/SETUP.md#terminal-and-chat-providers).
 
 ## Options and lifecycle
 
@@ -45,7 +45,7 @@ reconfigure. Session state and the selected HTTP profile are separate live state
 | `native.codex.args` | string list; `{ "--no-alt-screen", "--yolo" }` | Base argv, preserved for new/resume/continue. The host's existing execution policy is retained. |
 | `native.codex.wrap_tmux` | boolean; `true` | Frame composition/scrollback wrapper when tmux is installed. |
 | `native.codex.teardown_ignore` | string; shared daemon ERE | `awk` ERE of child daemon processes spared during tmux teardown. |
-| `native.antigravity.args` | string list; `{ "--settings", '{"altScreenMode":true}' }` | Session-only alternate-screen mode in `agy` for flicker-free rendering and native viewport scrolling. |
+| `native.antigravity.args` | string list; `{ "--settings", '{"altScreenMode":"always"}' }` | Session-only alternate-screen mode in `agy` for flicker-free rendering and native viewport scrolling. |
 | `terminal.provider` | `"native"`, `"snacks"`, provider table; `"native"` | PTY/view owner. |
 | `panel.width` | positive integer; `90` | Native/chat panel width in columns. |
 | `plugin_dirs` | ordered string list; `{}` | Local native plugins for Codex. Installation happens only at native Codex launch, in a disposable CLI home sharing the plugin cache. |

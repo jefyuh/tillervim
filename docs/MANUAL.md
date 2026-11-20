@@ -975,7 +975,14 @@ no Claude-only Oil action exists. From CodeDiff, chat keys use its origin tab.
 
 `ai` uses Codex's `ctrl+g` and `$EDITOR` to edit the actual input draft in this
 Nvim. `<C-d>` returns it; cancel preserves the original. `<C-v>` stages an image
-for Codex's own attachment path after the editor closes. An editor request
+for Codex's own attachment path after the editor closes and opens a companion
+`Snacks.image` thumbnail card beside the prompt (`<M-p>` / `,p` folds to a compact
+`[Image #N]` badge, `<M-n>` / `]i` / `[i` cycles multiple images). Inside any
+native agent terminal (`codex`, `agy`, `kimi`, `opencode`), `<C-v>` forwards the
+image paste to the CLI while showing the same non-focusable thumbnail and
+`[Image #N]` badge in the panel's top-right corner (`<M-p>` / `,p` folds,
+`<M-x>` / `,P` dismisses, and submitting with `<CR>` or cancelling with `<C-c>`
+clears it automatically). An editor request
 from a different program has no agent owner and takes no agent seed or image.
 `ar` resumes, `aR` continues, `am` chooses a model. On a running session these
 focus it and type nothing, protecting drafts and approvals. `at`/`aT` read

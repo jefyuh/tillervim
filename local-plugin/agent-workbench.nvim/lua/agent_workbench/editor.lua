@@ -222,21 +222,34 @@ end
 -- attach happens, and a second marker of ours would be sent along as literal
 -- text. Virtual lines are invisible to `:w` for exactly that reason.
 local IMAGE_NS = vim.api.nvim_create_namespace("ai_editor_images")
+local BASE_WINBAR = "  <C-d> return to agent   ·   <C-v> image   ·   <C-c> cancel   ·   also ZZ / :wq"
+local IMAGE_WINBAR = BASE_WINBAR .. "   ·   <M-p> preview"
 
 ---@param buf integer
 ---@param images string[]
-local function show_staged(buf, images)
+---@param win integer?
+local function show_staged(buf, images, win)
   if not vim.api.nvim_buf_is_valid(buf) then return end
   vim.api.nvim_buf_clear_namespace(buf, IMAGE_NS, 0, -1)
+  if win and vim.api.nvim_win_is_valid(win) then
+    vim.wo[win].winbar = #images > 0 and IMAGE_WINBAR or BASE_WINBAR
+  end
   if #images == 0 then return end
 
+  local preview = require("agent_workbench.image_preview")
   local virt = {}
-  for i = 1, #images do
-    virt[i] = { { ("  󰋩 image %d — attaches when you return the prompt"):format(i), "Comment" } }
+  for i, png in ipairs(images) do
+    local stat = vim.uv.fs_stat(png)
+    local sz = preview.format_bytes(stat and stat.size or 0)
+    local suffix = sz ~= "" and (" · " .. sz) or ""
+    virt[i] = { { ("  󰋩 [Image #%d]%s — attaches when you return the prompt"):format(i, suffix), "Comment" } }
   end
   vim.api.nvim_buf_set_extmark(buf, IMAGE_NS, math.max(vim.api.nvim_buf_line_count(buf) - 1, 0), 0, {
     virt_lines = virt,
   })
+  if win and vim.api.nvim_win_is_valid(win) then
+    preview.set_prompt(win, buf, images)
+  end
 end
 
 -- Indirection so tests can observe the handshake without a live agent.
@@ -327,11 +340,14 @@ local function present(path, sentinel, slot)
     callback = function() returned = true end,
   })
 
+  local win
+
   vim.api.nvim_create_autocmd("BufWipeout", {
     group = group,
     buffer = buf,
     callback = function()
       state.open[path] = nil
+      require("agent_workbench.image_preview").clear_prompt(buf)
       release(sentinel)
 
       if not returned or #images == 0 then
@@ -403,14 +419,30 @@ local function present(path, sentinel, slot)
       return
     end
     images[#images + 1] = png
-    show_staged(buf, images)
+    show_staged(buf, images, win)
   end, { buffer = buf, desc = "Attach clipboard image", silent = true })
+
+  vim.keymap.set({ "n", "i" }, "<M-p>", function()
+    require("agent_workbench.image_preview").toggle(buf)
+  end, { buffer = buf, desc = "Toggle staged image preview", silent = true })
+  vim.keymap.set({ "n", "i" }, "<M-n>", function()
+    require("agent_workbench.image_preview").cycle(buf, 1)
+  end, { buffer = buf, desc = "Next staged image", silent = true })
+  vim.keymap.set("n", ",p", function()
+    require("agent_workbench.image_preview").toggle(buf)
+  end, { buffer = buf, desc = "Toggle staged image preview", silent = true })
+  vim.keymap.set("n", "]i", function()
+    require("agent_workbench.image_preview").cycle(buf, 1)
+  end, { buffer = buf, desc = "Next staged image", silent = true })
+  vim.keymap.set("n", "[i", function()
+    require("agent_workbench.image_preview").cycle(buf, -1)
+  end, { buffer = buf, desc = "Previous staged image", silent = true })
 
   -- Centred and bounded rather than full-width: a prompt is read as a block,
   -- and the terminal underneath stays visible around it.
   local width = math.min(100, math.floor(vim.o.columns * 0.8))
   local height = math.min(20, math.floor(vim.o.lines * 0.5))
-  local win = vim.api.nvim_open_win(buf, true, {
+  win = vim.api.nvim_open_win(buf, true, {
     relative = "editor",
     width = width,
     height = height,
@@ -450,8 +482,7 @@ local function present(path, sentinel, slot)
     end,
   })
 
-  vim.wo[win].winbar =
-    "  <C-d> return to agent   ·   <C-v> image   ·   <C-c> cancel   ·   also ZZ / :wq"
+  vim.wo[win].winbar = BASE_WINBAR
   vim.wo[win].wrap = true
   vim.wo[win].linebreak = true
 

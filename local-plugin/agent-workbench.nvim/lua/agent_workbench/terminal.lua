@@ -59,7 +59,7 @@ local function owns_mouse(buf)
   local kind = M.agent_of(buf)
   if kind == "opencode" then return true end
   if kind == "antigravity" then
-    return command_text(buf):find('"altScreenMode"%s*:%s*true') ~= nil
+    return command_text(buf):find('"altScreenMode"%s*:%s*"always"') ~= nil
   end
   return false
 end
@@ -210,6 +210,7 @@ end
 function M.attach(buf)
   if not vim.api.nvim_buf_is_valid(buf) then return end
   pass_esc_to_agent(buf)
+  require("agent_workbench.image_preview").attach_terminal_keys(buf)
   if wrapped_in_tmux(buf) then
     forward_scrollback(buf)
   elseif not owns_mouse(buf) then
