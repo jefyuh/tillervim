@@ -1,37 +1,24 @@
--- CodeCompanion's HTTP adapters read keys of their own (NVIM_ANTHROPIC_API_KEY /
--- NVIM_OPENAI_API_KEY, lua/tillervim/config/ai.lua), never the variables the agent CLIs
--- bill against: exporting ANTHROPIC_API_KEY or OPENAI_API_KEY for Nvim's sake
--- would move Claude Code or Codex off the subscription.
---
--- Either key profile can be active after :AI key, and <leader>an starts an
--- API chat on either, so BOTH HTTP adapters are checked under several
--- provider lists (lua/tillervim/config/ai.lua), each in a fresh child Nvim -- the
--- shipped one, Codex alone (the built-in anthropic adapter must still read
--- its NVIM_* key) and Claude alone (the built-in openai adapter too) -- plus
--- the Codex ACP adapter, which must stay on the ChatGPT login even when no
--- provider offers it. The order of a list changes only `auto` and the inline
--- adapter, which this does not read, so Codex first is not run again.
+-- CodeCompanion's HTTP adapters resolve configured api_key sources ($VAR, literal,
+-- function), never the variables the agent CLIs bill against: exporting
+-- ANTHROPIC_API_KEY or OPENAI_API_KEY for a CLI never leaks into CodeCompanion.
 local t = dofile("tests/helper.lua")
 
--- Resolve every adapter the way CodeCompanion does before a request, under the
--- given environment, in a fresh Nvim. The provider list is set before the
--- plugin loads, the way an edit of config.lua would be, with an api-only
--- provider added: a second key on the anthropic adapter.
-local function resolve(env, order)
+local function resolve(env)
   local probe = [[
     local ai = require("agent_workbench.state")
-    local by_name = {}
-    for _, p in ipairs(ai.providers) do by_name[p.name] = p end
-    local list = {}
-    for name in vim.env.SPEC_ORDER:gmatch("[^,]+") do list[#list + 1] = by_name[name] end
-    list[#list + 1] = { name = "spec_work", label = "Spec work",
-      api = { name = "spec_work", adapter = "anthropic", api_key = "NVIM_SPEC_WORK_KEY" } }
+    local list = vim.deepcopy(ai.providers)
+    list[#list + 1] = { name = "env_prof", label = "Env OpenAI",
+      api = { name = "openai", adapter = "openai", api_key = "$SPEC_ENV_OPENAI_KEY" } }
+    list[#list + 1] = { name = "lit_prof", label = "Literal Work",
+      api = { name = "spec_literal", adapter = "anthropic", api_key = "literal-secret-key" } }
+    list[#list + 1] = { name = "fn_prof", label = "Fn Work",
+      api = { name = "spec_fn", adapter = "anthropic", api_key = function() return vim.env.SPEC_FN_BACKING end } }
     ai._set_providers(list)
     require("lazy").load({ plugins = { "codecompanion.nvim" } })
     local adapters = require("codecompanion.adapters")
     local utils = require("codecompanion.adapters.utils")
     local out = {}
-    for _, name in ipairs({ "anthropic", "openai", "spec_work" }) do
+    for _, name in ipairs({ "anthropic", "openai", "spec_literal", "spec_fn" }) do
       local ok, adapter = pcall(adapters.resolve, name)
       local key
       if ok and adapter then key = utils.get_env_vars(adapter).env_replaced.api_key end
@@ -44,44 +31,38 @@ local function resolve(env, order)
     io.stdout:write(vim.json.encode(out))
     vim.cmd("qa!")
   ]]
-  env = vim.tbl_extend("force", env, { SPEC_ORDER = order })
   local result = vim.system({ vim.v.progpath, "--headless", "-u", "init.lua", "-i", "NONE", "-c", "lua " .. probe:gsub("\n", " ") },
     { env = env, text = true }):wait(30000)
   local ok, decoded = pcall(vim.json.decode, (result.stdout or ""):match("{.*}") or "")
   return ok and decoded or { error = (result.stdout or "") .. (result.stderr or "") }
 end
 
-local adapters = {
-  anthropic = { cli = "ANTHROPIC_API_KEY", own = "NVIM_ANTHROPIC_API_KEY" },
-  openai = { cli = "OPENAI_API_KEY", own = "NVIM_OPENAI_API_KEY" },
-}
+local configured = resolve({
+  ANTHROPIC_API_KEY = "cli-anthropic",
+  OPENAI_API_KEY = "cli-openai",
+  SPEC_ENV_OPENAI_KEY = "from-dollar-var",
+  SPEC_FN_BACKING = "from-lua-function",
+})
 
-for _, order in ipairs({ "claude,codex", "codex", "claude" }) do
-  local both = resolve({
-    NVIM_AI_KEY_PROFILE = "",
-    ANTHROPIC_API_KEY = "cli-anthropic", NVIM_ANTHROPIC_API_KEY = "nvim-anthropic",
-    OPENAI_API_KEY = "cli-openai", NVIM_OPENAI_API_KEY = "nvim-openai",
-    NVIM_SPEC_WORK_KEY = "nvim-spec-work",
-  }, order)
-  for name in pairs(adapters) do
-    t.eq(both[name], { name = name, type = "http", key = "nvim-" .. name },
-      ("%s: the %s adapter reads %s"):format(order, name, adapters[name].own))
-  end
-  t.eq(both.spec_work, { name = "spec_work", type = "http", key = "nvim-spec-work" },
-    ("%s: a custom key profile is an adapter of its own, reading its own variable"):format(order))
-  t.eq(both.codex_auth, "chat-gpt",
-    ("%s: the Codex ACP adapter uses the ChatGPT login, not OPENAI_API_KEY"):format(order))
-  t.eq(both.codecompanion_adapter, vim.NIL, ("%s: vim.g.codecompanion_adapter stays unset"):format(order))
+t.eq(configured.anthropic, { name = "anthropic", type = "http", key = "" },
+  "unconfigured built-in anthropic adapter ignores ANTHROPIC_API_KEY")
+t.eq(configured.openai, { name = "openai", type = "http", key = "from-dollar-var" },
+  "$VAR api_key reads its named environment variable")
+t.eq(configured.spec_literal, { name = "spec_literal", type = "http", key = "literal-secret-key" },
+  "literal api_key string resolves directly without touching environment variables")
+t.eq(configured.spec_fn, { name = "spec_fn", type = "http", key = "from-lua-function" },
+  "function api_key resolves dynamically when CodeCompanion requests credentials")
+t.eq(configured.codex_auth, "chat-gpt",
+  "the Codex ACP adapter uses the ChatGPT login, not OPENAI_API_KEY")
+t.eq(configured.codecompanion_adapter, vim.NIL, "vim.g.codecompanion_adapter stays unset")
 
-  local cli_only = resolve({
-    NVIM_AI_KEY_PROFILE = "",
-    ANTHROPIC_API_KEY = "cli-anthropic", NVIM_ANTHROPIC_API_KEY = "",
-    OPENAI_API_KEY = "cli-openai", NVIM_OPENAI_API_KEY = "",
-  }, order)
-  for name, vars in pairs(adapters) do
-    t.ok(cli_only[name] and cli_only[name].name == name and cli_only[name].key ~= "cli-" .. name,
-      ("%s: %s alone is never used by the %s adapter"):format(order, vars.cli, name))
-  end
-end
+local unset_env = resolve({
+  ANTHROPIC_API_KEY = "cli-anthropic",
+  OPENAI_API_KEY = "cli-openai",
+  SPEC_ENV_OPENAI_KEY = "",
+  SPEC_FN_BACKING = "",
+})
+t.eq(unset_env.openai.key, "", "unset $VAR resolves to empty rather than falling back to OPENAI_API_KEY")
+t.eq(unset_env.spec_fn.key, "", "empty function result resolves to empty rather than CLI keys")
 
 t.done()

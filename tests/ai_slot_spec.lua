@@ -53,14 +53,17 @@ for _, name in ipairs({ "codex" }) do
   vim.fn.setfperm(bin .. "/" .. name, "rwx------")
 end
 local saved = {
-  path = vim.env.PATH, wrap = vim.env.CODEX_WRAP_TMUX, select = vim.ui.select,
-  anthropic = vim.env.NVIM_ANTHROPIC_API_KEY, openai = vim.env.NVIM_OPENAI_API_KEY,
+  path = vim.env.PATH, select = vim.ui.select,
+  anthropic = vim.env.SPEC_ANTHROPIC_API_KEY, openai = vim.env.SPEC_OPENAI_API_KEY,
   chan_send = api.nvim_chan_send,
 }
 vim.env.PATH = bin .. ":" .. saved.path
-vim.env.CODEX_WRAP_TMUX = "0"
-vim.env.NVIM_ANTHROPIC_API_KEY = "sk-ant-spec-not-a-key"
-vim.env.NVIM_OPENAI_API_KEY = "sk-spec-not-a-key"
+local restore_opts = require("agent_workbench.options")._patch({
+  native = { codex = { wrap_tmux = false } },
+  plugin_dirs = {},
+})
+vim.env.SPEC_ANTHROPIC_API_KEY = "sk-ant-spec-not-a-key"
+vim.env.SPEC_OPENAI_API_KEY = "sk-spec-not-a-key"
 local repo = scratch .. "/a repo"
 vim.fn.mkdir(repo .. "/.git", "p")
 vim.fn.mkdir(repo .. "/src", "p")
@@ -183,8 +186,9 @@ local ids = function(list) return vim.tbl_map(function(b) return b.id end, list)
 -- An additional HTTP profile exercises multi-chat routing without enabling a second native agent.
 local ORIGINAL_PROVIDERS = vim.deepcopy(config.providers)
 local PROVIDERS = vim.deepcopy(ORIGINAL_PROVIDERS)
+PROVIDERS[1].api = { adapter = "openai", label = "OpenAI", api_key = "$SPEC_OPENAI_API_KEY" }
 PROVIDERS[#PROVIDERS + 1] = { name = "anthropic", label = "Anthropic",
-  api = { adapter = "anthropic", api_key = "NVIM_ANTHROPIC_API_KEY" } }
+  api = { adapter = "anthropic", api_key = "$SPEC_ANTHROPIC_API_KEY" } }
 config._set_providers(PROVIDERS)
 local REVERSED = { vim.deepcopy(PROVIDERS[2]), vim.deepcopy(PROVIDERS[1]) }
 t.eq(ids(config.backends()), { "codex", "acp:codex", "api:openai", "api:anthropic" },
@@ -198,11 +202,11 @@ for _, b in ipairs(config.backends()) do by_id[b.id] = b end
 t.eq(by_id.codex.label, "Codex · terminal · subscription", "a terminal says what it is and who bills it")
 t.eq(by_id["acp:codex"].label, "Codex · CodeCompanion ACP · subscription", "an agent chat too")
 t.eq(by_id["api:openai"].label, "OpenAI · CodeCompanion API · API credits", "and an API chat")
-vim.env.NVIM_OPENAI_API_KEY = nil
+vim.env.SPEC_OPENAI_API_KEY = nil
 local openai_off = vim.tbl_filter(function(b) return b.id == "api:openai" end, config.backends())[1]
-t.eq({ openai_off.available, openai_off.why }, { false, "NVIM_OPENAI_API_KEY is not set" },
+t.eq({ openai_off.available, openai_off.why }, { false, "$SPEC_OPENAI_API_KEY is not set" },
   "an API profile without its key is unavailable, saying why")
-vim.env.NVIM_OPENAI_API_KEY = "sk-spec-not-a-key"
+vim.env.SPEC_OPENAI_API_KEY = "sk-spec-not-a-key"
 
 -- With no CLI or bridge in PATH, only HTTP entries can start.
 local no_cli = scratch .. "/no-cli"
@@ -1124,7 +1128,7 @@ t.eq(posts, {}, "no request but model-list lookups was attempted")
 -- that raises, or a hide that fails, says so at WARN through the facade's
 -- own guards, and would otherwise pass unseen.
 local expected = {
-  "NVIM_OPENAI_API_KEY is not set",
+  "$SPEC_OPENAI_API_KEY is not set",
   "Buffer has unsaved changes",
   "Sending code to CodeCompanion is disabled",
   "This buffer has no file",
@@ -1158,8 +1162,9 @@ end
 api.nvim_chan_send = saved.chan_send
 vim.ui.select = saved.select
 config._set_providers(ORIGINAL_PROVIDERS)
-vim.env.PATH, vim.env.CODEX_WRAP_TMUX = saved.path, saved.wrap
-vim.env.NVIM_ANTHROPIC_API_KEY, vim.env.NVIM_OPENAI_API_KEY = saved.anthropic, saved.openai
+restore_opts()
+vim.env.PATH = saved.path
+vim.env.SPEC_ANTHROPIC_API_KEY, vim.env.SPEC_OPENAI_API_KEY = saved.anthropic, saved.openai
 vim.notify = real_notify
 vim.fn.delete(scratch, "rf")
 t.done()

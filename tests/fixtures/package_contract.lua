@@ -23,7 +23,17 @@ declaration.native.codex.args[1] = 'changed'
 assert(#agent.options().native.codex.args == 0, 'setup retained the caller list')
   local valid, problem = pcall(core.setup, { behaviors = { autoread = 'yes' } })
   assert(not valid and problem:find('editor_core.behaviors.autoread', 1, true), 'invalid behavior declaration was accepted')
-  core.setup({ keymaps = false, behaviors = { input_method = false } })
+  valid, problem = pcall(core.setup, { log_level = 'VERBOSE' })
+  assert(not valid and problem:find('editor_core.log_level', 1, true), 'invalid log_level declaration was accepted')
+  valid, problem = pcall(core.setup, { input_method = { wait_time_ms = -1 } })
+  assert(not valid and problem:find('editor_core.input_method.wait_time_ms', 1, true), 'invalid input_method wait_time_ms was accepted')
+  core.setup({
+    keymaps = false,
+    log_level = 'INFO',
+    behaviors = { input_method = false },
+    input_method = { source = 'com.apple.keylayout.ABC', wait_time_ms = 0 },
+  })
+assert(require('editor_core.logger').get_level() == 'INFO', 'log_level option did not take effect')
 assert(vim.fn.maparg('ss', 'n') == '', 'keymaps=false installed actions')
 local config = { retention = { saved = 3 }, history_limit = false }
 git.setup(config)
@@ -53,10 +63,7 @@ for _, level in ipairs({ 'start', 'ok', 'info', 'warn', 'error' }) do
   writers[level] = vim.health[level]
   vim.health[level] = function(name) if level == 'start' then sections[name] = true end end
 end
-local english_source = vim.env.NVIM_ENGLISH_INPUT_SOURCE
-vim.env.NVIM_ENGLISH_INPUT_SOURCE = 'com.apple.keylayout.ABC'
 require('editor_core.health').check()
-vim.env.NVIM_ENGLISH_INPUT_SOURCE = english_source
 for level, writer in pairs(writers) do vim.health[level] = writer end
 assert(not sections['config: external tools'] and not sections['config: mason packages'], 'core checked host dependencies')
 assert(package.loaded['mason-registry'] == nil, 'core health imported Mason')

@@ -22,7 +22,7 @@ TillerVim 把编辑、原生 Agent、聊天与 Git Review 放进同一个 Neovim
 
 准备 Neovim **0.12.5+**、Git 和 ripgrep。同步 Treesitter 解析器需要 C 编译器和 tree-sitter CLI **0.26.1+**。Nerd Font 用于显示图标。选择语言模块后，再按项目准备 SDK。
 
-只准备所选 AI 入口对应的 CLI 和账号。Codex 原生终端使用 `codex`，其 tmux 渲染可选；Codex ACP 单独使用 `codex-acp`。OpenAI HTTP 读取 `NVIM_OPENAI_API_KEY`。其他入口的命令与授权方式见[初始化手册](docs/SETUP_CN.md)。
+只准备所选 AI 入口对应的 CLI 和账号。Codex 原生终端使用 `codex`，其 tmux 渲染可选；Codex ACP 单独使用 `codex-acp`。可选 HTTP API 入口在个人配置的 `agent-workbench.nvim` `opts.providers` 中显式声明。其他入口的命令与授权方式见[初始化手册](docs/SETUP_CN.md)。
 
 ## 安装
 
@@ -152,7 +152,7 @@ return {
 | `<leader>?` | 查看实时按键指南 |
 
 原生 Codex 默认参数为 `--no-alt-screen --yolo`；通过 `agent-workbench.nvim` 的
-`opts.native.codex.args` 修改启动策略。HTTP 读取 `NVIM_*` key 变量，Codex ACP 使用
+`opts.native.codex.args` 修改启动策略。HTTP 入口解析显式配置的 `api_key`（`"$VAR"`、字面量或 `function`），Codex ACP 使用
 ChatGPT 登录，不改写计费环境变量。
 
 完整编辑、调试和 Review 工作流见[手册](docs/MANUAL_CN.md)。

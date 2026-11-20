@@ -25,6 +25,112 @@ end
 
 local RESTORE_DELAY_MS = 25
 
+local function max_topline(win, buf)
+  return math.max(1, vim.api.nvim_buf_line_count(buf) - vim.api.nvim_win_get_height(win) + 1)
+end
+
+-- Keep a terminal window from scrolling past its last terminal row into empty
+-- EndOfBuffer space. Builtin Normal-mode downward scrolling (<ScrollWheelDown>,
+-- <C-e>, <C-d>, <PageDown>) allows topline to advance all the way to line('$'),
+-- pushing the live bottom row up toward the top of the window.
+function M.clamp_scroll(win)
+  if not win or not vim.api.nvim_win_is_valid(win) then return end
+  local buf = vim.api.nvim_win_get_buf(win)
+  if vim.bo[buf].buftype ~= "terminal" or vim.wo[win].wrap then return end
+  local max_top = max_topline(win, buf)
+  vim.api.nvim_win_call(win, function()
+    local view = vim.fn.winsaveview()
+    if view.topline > max_top then
+      view.topline = max_top
+      vim.fn.winrestview(view)
+    end
+  end)
+end
+
+function M.scroll_wheel_down(win, count)
+  if not win or not vim.api.nvim_win_is_valid(win) then return end
+  local buf = vim.api.nvim_win_get_buf(win)
+  if vim.bo[buf].buftype ~= "terminal" or vim.wo[win].wrap then return end
+  local step = (tonumber((vim.o.mousescroll or ""):match("ver:(%d+)")) or 3) * (count or 1)
+  if step <= 0 then return end
+  local max_top = max_topline(win, buf)
+  vim.api.nvim_win_call(win, function()
+    local view = vim.fn.winsaveview()
+    local new_top = math.min(max_top, view.topline + step)
+    if new_top > view.topline then
+      view.topline = new_top
+      if view.lnum < new_top then view.lnum = new_top end
+      vim.fn.winrestview(view)
+    end
+  end)
+end
+
+function M.attach_scroll_clamp(buf)
+  if not vim.api.nvim_buf_is_valid(buf) then return end
+  vim.b[buf].snacks_scroll = false
+
+  vim.keymap.set("n", "<ScrollWheelDown>", function()
+    local pos = vim.fn.getmousepos()
+    local target = (pos.winid and pos.winid ~= 0) and pos.winid or vim.api.nvim_get_current_win()
+    if not vim.api.nvim_win_is_valid(target) then return end
+    local tbuf = vim.api.nvim_win_get_buf(target)
+    if vim.bo[tbuf].buftype ~= "terminal" or vim.wo[target].wrap then
+      local step = (tonumber((vim.o.mousescroll or ""):match("ver:(%d+)")) or 3) * vim.v.count1
+      if step > 0 then
+        vim.api.nvim_win_call(target, function()
+          vim.cmd.normal({ args = { step .. "\5" }, bang = true })
+        end)
+      end
+      return
+    end
+    M.scroll_wheel_down(target, vim.v.count1)
+  end, { buffer = buf, silent = true, desc = "Scroll terminal down" })
+
+  local function step_down(kind, fallback)
+    return function()
+      local win = vim.api.nvim_get_current_win()
+      local wbuf = vim.api.nvim_win_get_buf(win)
+      if vim.bo[wbuf].buftype ~= "terminal" or vim.wo[win].wrap then
+        vim.cmd.normal({ args = { (vim.v.count > 0 and tostring(vim.v.count) or "") .. fallback }, bang = true })
+        return
+      end
+      local cnt = vim.api.nvim_buf_line_count(wbuf)
+      local h = vim.api.nvim_win_get_height(win)
+      local max_top = math.max(1, cnt - h + 1)
+      local view = vim.fn.winsaveview()
+      if kind == "line" then
+        local new_top = math.min(max_top, view.topline + vim.v.count1)
+        if new_top > view.topline then
+          view.topline = new_top
+          if view.lnum < new_top then view.lnum = new_top end
+          vim.fn.winrestview(view)
+        end
+        return
+      end
+      local step
+      if kind == "half" then
+        if vim.v.count > 0 then vim.wo[win].scroll = math.min(h, vim.v.count) end
+        step = vim.v.count > 0 and vim.v.count or vim.wo[win].scroll
+      else
+        step = math.max(1, h - 2) * vim.v.count1
+      end
+      local new_top = math.min(max_top, math.max(view.topline, view.topline + step))
+      local new_lnum = math.min(cnt, view.lnum + step)
+      if new_top ~= view.topline or new_lnum ~= view.lnum then
+        view.topline = new_top
+        if new_lnum < new_top then new_lnum = new_top end
+        view.lnum = new_lnum
+        vim.fn.winrestview(view)
+      end
+    end
+  end
+
+  vim.keymap.set("n", "<C-e>", step_down("line", "\5"), { buffer = buf, silent = true, desc = "Scroll terminal line down" })
+  vim.keymap.set("n", "<C-d>", step_down("half", "\4"), { buffer = buf, silent = true, desc = "Scroll terminal half-page down" })
+  vim.keymap.set("n", "<C-f>", step_down("page", "\6"), { buffer = buf, silent = true, desc = "Scroll terminal page down" })
+  vim.keymap.set("n", "<PageDown>", step_down("page", "\6"), { buffer = buf, silent = true, desc = "Scroll terminal page down" })
+end
+
 -- Drift fix for a native-agent :terminal window.
 -- libvterm's grid only invalidates on shrink, not on grow. Shrinking forces
 -- row truncation, which clears the residue cells; growing back restores the

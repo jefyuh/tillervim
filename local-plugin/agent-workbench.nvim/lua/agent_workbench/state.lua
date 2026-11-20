@@ -18,14 +18,11 @@ for _, kind in ipairs({ "antigravity", "kimi", "opencode" }) do
   TUI_KINDS[kind] = { command = settings.native[kind].command, capabilities = {} }
 end
 
--- CodeCompanion's two built-in HTTP adapters, always redirected to an NVIM_*
--- variable (lua/tillervim/plugins/ai/codecompanion.lua), whichever providers are listed:
--- a chat restored from history, or any upstream path naming the plain adapter,
--- must never read a CLI's own billing variable.
-local BUILTIN_HTTP_KEYS = {
-  anthropic = "NVIM_ANTHROPIC_API_KEY",
-  openai = "NVIM_OPENAI_API_KEY",
-}
+-- CodeCompanion's built-in HTTP adapters, neutralized by default in
+-- lua/tillervim/plugins/ai/codecompanion.lua unless explicitly configured in
+-- providers: a chat restored from history, or any upstream path naming the
+-- plain adapter, must never silently read a CLI's own billing variable.
+local BUILTIN_HTTP_ADAPTERS = { "anthropic", "openai" }
 
 -- CodeCompanion's built-in ACP adapters that must never fall back to API-key
 -- auth, whichever providers are listed: codex-acp's own default (`api-key`)
@@ -43,19 +40,72 @@ local M = {
   codecompanion = {},
   key = { auto = true },
   panel = vim.deepcopy(settings.panel),
-  builtin_http_keys = BUILTIN_HTTP_KEYS,
+  builtin_http_adapters = BUILTIN_HTTP_ADAPTERS,
   builtin_acp_auth = BUILTIN_ACP_AUTH,
 }
 
----Refuse a key profile that would read a CLI's own billing variable. Raised at
----load, so a bad entry stops startup instead of reaching a request.
+---@class ai.KeySpec
+---@field source "env"|"value"|"function"
+---@field var? string
+---@field display string redacted label safe for UI/health/notifications
+---@field configured fun(): boolean cheap check without executing user functions
+---@field resolve fun(): string|nil, string|nil
+
+---Parse and validate an HTTP profile's `api_key`: `"$VAR"` (or `"${VAR}"`), a
+---literal secret string, or `function() -> string|nil`. Refuses CLI billing
+---variables at load time so startup stops before any request can run.
 ---@param name string
----@param profile { adapter: string, label: string, api_key: string, model?: string }
-function M.check_key_profile(name, profile)
-  local var = type(profile) == "table" and profile.api_key or nil
-  if type(var) ~= "string" or CLI_KEYS[var] or not var:match("^NVIM_[%w_]+$") then
-    error(("AI key profile %q must read an NVIM_* variable, not %s"):format(name, tostring(var)), 0)
+---@param raw any
+---@return ai.KeySpec
+function M.parse_api_key(name, raw)
+  if type(raw) == "function" then
+    return {
+      source = "function",
+      display = "function",
+      configured = function() return true end,
+      resolve = function()
+        local ok, value = pcall(raw)
+        if not ok then return nil, ("api_key function for %s failed: %s"):format(name, tostring(value)) end
+        if type(value) ~= "string" or value == "" then
+          return nil, ("api_key function for %s returned no key"):format(name)
+        end
+        return value
+      end,
+    }
   end
+  if type(raw) ~= "string" or vim.trim(raw) == "" then
+    error(("AI key profile %q: api_key must be $VAR, a non-empty string, or a function"):format(name), 0)
+  end
+  if raw:sub(1, 1) == "$" then
+    local var = raw:match("^%$%{([%a_][%w_]*)%}$") or raw:match("^%$([%a_][%w_]*)$")
+    if not var then
+      error(("AI key profile %q: invalid environment variable %q (expected $VAR or ${VAR})"):format(name, raw), 0)
+    end
+    if CLI_KEYS[var] then
+      error(("AI key profile %q cannot read CLI billing variable $%s"):format(name, var), 0)
+    end
+    local display = "$" .. var
+    return {
+      source = "env",
+      var = var,
+      display = display,
+      configured = function() return (vim.env[var] or "") ~= "" end,
+      resolve = function()
+        local value = vim.env[var]
+        if value == nil or value == "" then return nil, display .. " is not set" end
+        return value
+      end,
+    }
+  end
+  if CLI_KEYS[raw] then
+    error(("AI key profile %q cannot read CLI billing variable %s"):format(name, raw), 0)
+  end
+  return {
+    source = "value",
+    display = "literal",
+    configured = function() return true end,
+    resolve = function() return raw end,
+  }
 end
 
 ---A native terminal agent as the rest of the config reads it.
@@ -147,11 +197,11 @@ function M.build(list)
       local id = a.name or a.adapter
       if adapters[id] then fail("%s: api name %q is used twice; give api.name", who, id) end
       adapters[id] = true
+      local key_spec = M.parse_api_key(id, a.api_key)
       local profile = {
         name = id, provider = p.name, adapter = a.adapter, label = a.label or p.label,
-        api_key = a.api_key, model = a.model,
+        api_key = key_spec.display, key_spec = key_spec, model = a.model,
       }
-      M.check_key_profile(id, profile)
       out.key_profiles[id] = profile
       out.key_names[#out.key_names + 1] = id
     end
@@ -182,18 +232,6 @@ local function apply(list)
 end
 apply(vim.deepcopy(settings.providers))
 
--- NVIM_AI_PROVIDER and vim.g.ai_provider chose a default backend once; there
--- is none any more. A leftover export only earns a word, not a failed start.
-for _, knob in ipairs({ { "NVIM_AI_PROVIDER", vim.env.NVIM_AI_PROVIDER }, { "vim.g.ai_provider", vim.g.ai_provider } }) do
-  if knob[2] ~= nil and knob[2] ~= "" then
-    vim.schedule(function()
-      vim.notify(("%s is no longer read: <leader>an lists every provider in configured order")
-        :format(knob[1]), vim.log.levels.WARN, { title = "AI" })
-    end)
-    break
-  end
-end
-
 ---@return string[] the native agents offered, in provider order
 function M.agent_names() return vim.deepcopy(built.agent_names) end
 ---@return string[] every key profile, in provider order
@@ -201,12 +239,12 @@ function M.key_names() return vim.deepcopy(built.key_names) end
 
 local function is_set(var) return (vim.env[var] or "") ~= "" end
 
----The profile `auto` stands for now: the first whose key is set, else the
----first; nil when no provider offers `api`.
+---The profile `auto` stands for now: the first whose key is configured, else
+---the first; nil when no provider offers `api`.
 ---@return string|nil
 function M.auto_key()
   for _, name in ipairs(built.key_names) do
-    if is_set(M.key_profiles[name].api_key) then return name end
+    if M.key_profiles[name].key_spec.configured() then return name end
   end
   return built.key_names[1]
 end
@@ -224,7 +262,7 @@ function M.use_key(name)
       -- No provider offers `api`: inline edits and command prompts refuse
       -- (ai.companion), and nothing else reads the key.
       M.key.name, M.key.label, M.key.auto = nil, "none", true
-      M.codecompanion.http_adapter, M.codecompanion.api_key, M.codecompanion.model = nil, nil, nil
+      M.codecompanion.http_adapter, M.codecompanion.api_key, M.codecompanion.key_spec, M.codecompanion.model = nil, nil, nil, nil
       return
     end
     local names = M.key_names()
@@ -235,6 +273,7 @@ function M.use_key(name)
   -- The adapter *name*: a profile's name is its CodeCompanion adapter.
   M.codecompanion.http_adapter = id
   M.codecompanion.api_key = profile.api_key
+  M.codecompanion.key_spec = profile.key_spec
   M.codecompanion.model = profile.model
 end
 
@@ -294,10 +333,10 @@ function M.backends()
   end
   for _, name in ipairs(built.key_names) do
     local kp = M.key_profiles[name]
-    local ok = is_set(kp.api_key)
+    local ok = kp.key_spec.configured()
     all[#all + 1] = {
       id = "api:" .. name, kind = "http", provider = kp.provider, adapter = name, profile = name,
-      api_key = kp.api_key, model = kp.model,
+      api_key = kp.api_key, key_spec = kp.key_spec, model = kp.model,
       label = kp.label .. " · CodeCompanion API · API credits",
       available = ok, why = not ok and (kp.api_key .. " is not set") or nil,
     }
@@ -316,8 +355,7 @@ function M._set_providers(list)
 end
 
 M.use_key("auto")
-local key_env = vim.env.NVIM_AI_KEY_PROFILE
-local key_default = (key_env ~= "" and key_env or nil) or vim.g.ai_key_profile or settings.key_profile
+local key_default = settings.key_profile
 -- A typo in this optional knob falls back to auto instead of aborting startup.
 if key_default and key_default ~= "" and not pcall(M.use_key, key_default) then
   vim.schedule(function()

@@ -23,10 +23,10 @@ M.bridges = {
   copilot = { label = "GitHub Copilot", adapter = "copilot_acp", command = "copilot" },
   vibe = { label = "Mistral Vibe", adapter = "mistral_vibe", command = "vibe-acp" },
 }
-M.ai = { "codex", "codex-acp", "openai", "antigravity", "antigravity-acp", "kimi", "kimi-acp", "opencode", "opencode-acp", "copilot-acp", "vibe-acp" }
+M.ai = { "codex", "codex-acp", "antigravity", "antigravity-acp", "kimi", "kimi-acp", "opencode", "opencode-acp", "copilot-acp", "vibe-acp" }
 M.defaults = {
   theme = "solarized-osaka", explorer = "oil", completion = "local", languages = M.languages,
-  ai = { "codex", "codex-acp", "openai" },
+  ai = { "codex", "codex-acp" },
 }
 function M.validate(profile)
   assert(type(profile) == "table" and not vim.islist(profile), "tillervim.json must contain an object")

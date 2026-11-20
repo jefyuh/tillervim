@@ -1,12 +1,13 @@
 -- Supported consumer options. Requiring this module registers nothing.
 local M = {}
+local DEFAULT_TEARDOWN_IGNORE = "gradle|kotlin.*[Dd]aemon|crashpad_handler|qemu-system|/emulator/|adb .*fork-server|OrbStack|com[.]docker|ibtoold|CoreSimulator|SkyComputerUseClient"
 local defaults = {
   providers = { { name = "codex", label = "Codex", cli_api_key = "OPENAI_API_KEY", tui = { kind = "codex" } } },
   key_profile = "auto",
   panel = { width = 90 },
   terminal = { provider = "native" },
-  native = { codex = { command = "codex", args = { "--no-alt-screen", "--yolo" }, wrap_tmux = true },
-    antigravity = { command = "agy", args = {} }, kimi = { command = "kimi", args = {} },
+  native = { codex = { command = "codex", args = { "--no-alt-screen", "--yolo" }, wrap_tmux = true, teardown_ignore = DEFAULT_TEARDOWN_IGNORE },
+    antigravity = { command = "agy", args = { "--settings", '{"altScreenMode":true}' } }, kimi = { command = "kimi", args = {} },
     opencode = { command = "opencode", args = {} } },
   integrations = { companion = false, review = false },
   plugin_dirs = {},
@@ -54,6 +55,7 @@ function M.setup(opts)
   end
   assert(type(value.key_profile) == "string" and value.key_profile ~= "", "agent_workbench.key_profile must be a profile name")
   assert(type(value.native.codex.wrap_tmux) == "boolean", "agent_workbench.native.codex.wrap_tmux must be boolean")
+  assert(type(value.native.codex.teardown_ignore) == "string", "agent_workbench.native.codex.teardown_ignore must be a string")
   assert(vim.islist(value.plugin_dirs), "agent_workbench.plugin_dirs must be an ordered list")
   for i, dir in ipairs(value.plugin_dirs) do assert(type(dir) == "string" and dir ~= "", "agent_workbench.plugin_dirs[" .. i .. "] must be a directory path") end
   assert(type(value.panel.width) == "number" and value.panel.width >= 1 and value.panel.width % 1 == 0,
@@ -75,5 +77,14 @@ end
 
 function M.get() return vim.deepcopy(effective or defaults) end
 function M.callback(name) return (effective or defaults).callbacks[name] end
+
+---Specs only: temporarily mutate effective options in-process and return a restore closure.
+function M._patch(patch)
+  local prev = vim.deepcopy(effective or defaults)
+  local next_val = vim.tbl_deep_extend("force", vim.deepcopy(prev), patch or {})
+  if patch and patch.plugin_dirs ~= nil then next_val.plugin_dirs = vim.deepcopy(patch.plugin_dirs) end
+  effective = next_val
+  return function() effective = prev end
+end
 
 return M

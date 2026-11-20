@@ -43,19 +43,21 @@ reconfigure. Session state and the selected HTTP profile are separate live state
 | `providers` | ordered table list; one Codex native entry | Unique `name`, `label`, optional `cli_api_key`, and `tui`, `acp`, `api` parts. Supported native kinds are `codex`, `antigravity`, `kimi` and `opencode`. |
 | `native.codex.command` | string; `"codex"` | Executable or absolute executable path. |
 | `native.codex.args` | string list; `{ "--no-alt-screen", "--yolo" }` | Base argv, preserved for new/resume/continue. The host's existing execution policy is retained. |
-| `native.codex.wrap_tmux` | boolean; `true` | Frame composition/scrollback wrapper when tmux is installed. `CODEX_WRAP_TMUX` then `vim.g.codex_wrap_tmux` take precedence. |
+| `native.codex.wrap_tmux` | boolean; `true` | Frame composition/scrollback wrapper when tmux is installed. |
+| `native.codex.teardown_ignore` | string; shared daemon ERE | `awk` ERE of child daemon processes spared during tmux teardown. |
+| `native.antigravity.args` | string list; `{ "--settings", '{"altScreenMode":true}' }` | Session-only alternate-screen mode in `agy` for flicker-free rendering and native viewport scrolling. |
 | `terminal.provider` | `"native"`, `"snacks"`, provider table; `"native"` | PTY/view owner. |
 | `panel.width` | positive integer; `90` | Native/chat panel width in columns. |
-| `plugin_dirs` | ordered string list; `{}` | Local native plugins; `NVIM_AI_PLUGIN_DIR` overrides this list. Installation happens only at native Codex launch, in a disposable CLI home sharing the plugin cache. |
+| `plugin_dirs` | ordered string list; `{}` | Local native plugins for Codex. Installation happens only at native Codex launch, in a disposable CLI home sharing the plugin cache. |
 | `integrations.companion` | boolean; `false` | Enable the optional CodeCompanion chat/inline integration. The host installs/configures CodeCompanion. |
 | `integrations.review` | boolean; `false` | Enable prompt hooks and review events. The host supplies git-review.nvim and CodeDiff. |
-| `key_profile` | string; `"auto"` | Startup HTTP profile. Nonempty env `NVIM_AI_KEY_PROFILE` > `vim.g.ai_key_profile` > opts. |
+| `key_profile` | string; `"auto"` | Startup HTTP profile (`"auto"` or a configured `api` profile name). |
 | `review` | table | Partial review policy; live `vim.g.ai_review` overrides it. See the host manual for every field. |
 | `callbacks` | optional function table | `project_root(path)`, `editor_win()`, `origin_tab(tab)`, `notify_error(error)`; native defaults require no private host module. |
 
 A provider's `acp = { adapter, command, auth_method? }` identifies a CLI bridge.
 `api = { adapter, api_key, name?, label?, model? }` identifies an HTTP profile;
-`api_key` must name `NVIM_*`, never a CLI billing variable. The host's built-in
+`api_key` accepts `"$VAR"` (environment variable), a literal key string, or `function() -> string|nil` (never a CLI billing variable). The host's built-in
 OpenAI/Anthropic adapter safeguards and Codex `chat-gpt` ACP authentication stay
 in place. Switching HTTP profiles does not restart or move a terminal/chat.
 

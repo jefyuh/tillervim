@@ -28,8 +28,9 @@ local t = dofile("tests/helper.lua")
 local config = require("agent_workbench.state")
 -- Explicit transport fixture, independent of the user's enabled native backends.
 local fixture = vim.deepcopy(config.providers)
+fixture[1].api = { adapter = "openai", label = "OpenAI", api_key = "$SPEC_OPENAI_API_KEY" }
 fixture[#fixture + 1] = { name = "anthropic_fixture", label = "Anthropic", api = {
-  adapter = "anthropic", api_key = "NVIM_ANTHROPIC_API_KEY",
+  adapter = "anthropic", api_key = "$SPEC_ANTHROPIC_API_KEY",
 } }
 config._set_providers(fixture)
 
@@ -52,12 +53,12 @@ local function press(lhs, mode) return key(lhs, mode).callback() end
 
 -- Fake keys, set inside this spec only. Whatever the shell exported is put
 -- back at the end, and the agent CLIs' own variables are never touched.
-local VARS = { "NVIM_ANTHROPIC_API_KEY", "NVIM_OPENAI_API_KEY" }
+local VARS = { "SPEC_ANTHROPIC_API_KEY", "SPEC_OPENAI_API_KEY" }
 local saved = {}
 for _, var in ipairs(VARS) do saved[var] = vim.env[var] end
 local function fake_keys()
-  vim.env.NVIM_ANTHROPIC_API_KEY = "sk-ant-spec-not-a-key"
-  vim.env.NVIM_OPENAI_API_KEY = "sk-spec-not-a-key"
+  vim.env.SPEC_ANTHROPIC_API_KEY = "sk-ant-spec-not-a-key"
+  vim.env.SPEC_OPENAI_API_KEY = "sk-spec-not-a-key"
 end
 fake_keys()
 
@@ -90,13 +91,13 @@ end
 -- Refusals come first, and need nothing loaded
 ---------------------------------------------------------------------------
 
-vim.env.NVIM_ANTHROPIC_API_KEY = nil
+vim.env.SPEC_ANTHROPIC_API_KEY = nil
 notes = {}
 press(" an")
 t.ok(not offers("api:anthropic") and offers("api:openai"),
   "the new-chat picker leaves out an API chat whose profile's variable is unset")
 t.eq(companion.create(backend("api:anthropic")), nil, "and creating one anyway is refused")
-t.ok(errors()[1] and errors()[1].msg:find("NVIM_ANTHROPIC_API_KEY is not set", 1, true) ~= nil, "naming the variable")
+t.ok(errors()[1] and errors()[1].msg:find("$SPEC_ANTHROPIC_API_KEY is not set", 1, true) ~= nil, "naming the variable")
 t.eq(key(" ae").callback(), "<Ignore>", "<leader>ae refuses before the command line opens")
 t.eq(#errors(), 2, "and says so too, once the textlock is gone")
 t.ok(not loaded(), "a refusal loads nothing")
@@ -213,7 +214,7 @@ t.ok(openai ~= nil and config.key.name == "anthropic",
 local providers = vim.deepcopy(config.providers)
 local with_pinned = vim.deepcopy(providers)
 with_pinned[#with_pinned + 1] = { name = "spec_pinned", label = "Spec",
-  api = { name = "spec_pinned", adapter = "anthropic", api_key = "NVIM_ANTHROPIC_API_KEY", model = "spec-model" } }
+  api = { name = "spec_pinned", adapter = "anthropic", api_key = "$SPEC_ANTHROPIC_API_KEY", model = "spec-model" } }
 config._set_providers(with_pinned)
 local pinned = backend("api:spec_pinned")
 t.ok(pinned ~= nil and pinned.available, "every key profile has an API chat entry")

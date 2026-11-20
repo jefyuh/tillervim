@@ -205,9 +205,15 @@ local detected = 0
 local source, origin = input_method._resolve_default_source(" com.apple.keylayout.ABC ", function()
   detected = detected + 1
 end)
-t.eq(source, "com.apple.keylayout.ABC", "the environment source is trimmed and preferred")
-t.eq(origin, "NVIM_ENGLISH_INPUT_SOURCE", "health can report the environment origin")
-t.eq(detected, 0, "macOS defaults are not read when the environment is configured")
+t.eq(source, "com.apple.keylayout.ABC", "the configured opts source is trimmed and preferred")
+t.eq(origin, "editor_core.input_method.source", "health can report the opts origin")
+t.eq(detected, 0, "macOS defaults are not read when opts.input_method.source is configured")
+
+input_method.configure({ source = "com.apple.keylayout.Colemak", wait_time_ms = 0 })
+local cfg_source, cfg_origin = input_method.default_source()
+t.eq({ cfg_source, cfg_origin }, { "com.apple.keylayout.Colemak", "editor_core.input_method.source" },
+  "input_method.configure sets the active Normal-mode source")
+input_method.configure(nil)
 
 source, origin = input_method._resolve_default_source(nil, function()
   return "com.apple.keylayout.US\n"

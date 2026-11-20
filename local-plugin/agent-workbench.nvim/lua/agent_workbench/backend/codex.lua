@@ -8,9 +8,9 @@ local terminals = require("agent_workbench.terminal_provider")
 
 -- Codex uses synchronized terminal updates for each TUI frame. Neovim's
 -- libvterm does not implement that protocol, so let a dedicated tmux server
--- compose the frame before it reaches :terminal. Precedence: env > vim.g > on.
+-- compose the frame before it reaches :terminal.
 local function should_wrap_tmux()
-  return launch.enabled("CODEX_WRAP_TMUX", "codex_wrap_tmux")
+  return require("agent_workbench.options").get().native.codex.wrap_tmux ~= false
 end
 
 local function terminal_command(args)
@@ -387,7 +387,7 @@ function M.stop()
   local argv = info and info.cmd or {}
   for i, arg in ipairs(argv) do
     if arg == "-L" and argv[i + 1] == "codex-nvim-" .. vim.fn.getpid() then
-      vim.system({ launch.teardown(), "--wait", argv[i + 1] }, { timeout = 5000 }):wait()
+      vim.system(launch.teardown_argv(argv[i + 1], true), { timeout = 5000 }):wait()
       break
     end
   end

@@ -1116,11 +1116,13 @@ local function store_listing()
   end
   return listing
 end
-local VARS = { "NVIM_ANTHROPIC_API_KEY", "NVIM_OPENAI_API_KEY" }
-local saved_keys = {}
-for _, var in ipairs(VARS) do saved_keys[var] = vim.env[var] end
-vim.env.NVIM_ANTHROPIC_API_KEY = "sk-ant-spec-not-a-key"
-vim.env.NVIM_OPENAI_API_KEY = "sk-spec-not-a-key"
+local original_providers = vim.deepcopy(config.providers)
+local round_providers = vim.deepcopy(original_providers)
+round_providers[#round_providers + 1] = {
+  name = "openai_spec", label = "OpenAI",
+  api = { adapter = "openai", api_key = "sk-spec-not-a-key" },
+}
+config._set_providers(round_providers)
 local stores_before = store_listing()
 
 require("lazy").load({ plugins = { "codecompanion.nvim" } })
@@ -1157,7 +1159,7 @@ t.eq(rounds._state().chats[real_conv], nil, "closing the chat forgets it")
 pause(100)
 t.eq(vim.tbl_filter(function(m) return m ~= "GET" end, requests), {}, "nothing was sent")
 t.eq(store_listing(), stores_before, "no chat history or session was written")
-for _, var in ipairs(VARS) do vim.env[var] = saved_keys[var] end
+config._set_providers(original_providers)
 
 ---------------------------------------------------------------------------
 -- ai.feed rejects unimplemented kinds without constructing a backend.

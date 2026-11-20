@@ -4,18 +4,8 @@ local M = {}
 local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h:h")
 function M.script(name) return root .. "/scripts/" .. name end
 
----An opt-out preference with environment > vim.g > enabled precedence.
----@param env_name string
----@param global_name string
----@return boolean
-function M.enabled(env_name, global_name)
-  local value = vim.env[env_name]
-  if value == "1" or value == "true" then return true end
-  if value == "0" or value == "false" then return false end
-  if vim.g[global_name] ~= nil then return vim.g[global_name] ~= false end
-  local kind = env_name:match("^(.-)_WRAP_TMUX$")
-  local native = kind and require("agent_workbench.options").get().native[kind:lower()]
-  return not native or native.wrap_tmux ~= false
+local function teardown_ignore()
+  return require("agent_workbench.options").get().native.codex.teardown_ignore
 end
 
 ---Path to the $EDITOR wrapper the agent terminals are launched with.
@@ -41,18 +31,26 @@ function M.teardown()
   return M.script("agent-teardown")
 end
 
----The tmux command both wrappers install as their `client-detached` hook: run
+---Command argv to invoke agent-teardown with the configured ignore pattern.
+---@param socket string
+---@param wait? boolean
+---@return string[]
+function M.teardown_argv(socket, wait)
+  local argv = { M.teardown(), "--ignore", teardown_ignore() }
+  if wait then argv[#argv + 1] = "--wait" end
+  argv[#argv + 1] = socket
+  return argv
+end
+
+---The tmux command installed as the wrapper's `client-detached` hook: run
 ---agent-teardown for `socket` detached, or -- should the script be missing --
----fall back to a bare kill-server, so the server never outlives its client
----either way. Kept in one place because the Codex wrapper passes it as a
----single argv entry while the Claude one re-quotes it for `sh -c`; the inner
----quotes are single so the tmux double quotes around them stay untouched.
+---fall back to a bare kill-server, so the server never outlives its client.
 ---@param socket string the wrapper server's `-L` name
 ---@return string
 function M.teardown_hook(socket)
-  local sh = vim.fn.shellescape(M.teardown()) .. " " .. socket
+  local sh = table.concat(vim.tbl_map(vim.fn.shellescape, M.teardown_argv(socket, false)), " ")
     .. " || tmux -L " .. socket .. " kill-server"
-  return 'run-shell -b "' .. sh .. '"'
+  return 'run-shell -b "' .. sh:gsub('[\\"$`]', "\\%0") .. '"'
 end
 
 ---Environment for the TUI's ctrl+g handoff, including without tmux. A tmux
@@ -77,19 +75,21 @@ function M.ensure_watchdog(agent)
   local pid = vim.fn.getpid()
   local prefix = agent .. "-nvim-"
   local socket = prefix .. pid
-  local teardown = vim.fn.shellescape(M.teardown())
+  local teardown = table.concat(vim.tbl_map(vim.fn.shellescape, {
+    M.teardown(), "--ignore", teardown_ignore(), "--wait",
+  }), " ")
   local script = string.format([[
     for s in /private/tmp/tmux-*/%s* /tmp/tmux-*/%s*; do
       [ -e "$s" ] || continue
       case $s in *.lock) continue ;; esac   # tmux's lock file beside the socket
       owner=${s##*%s}
       if ! kill -0 "$owner" 2>/dev/null; then
-        %s --wait "$s" || tmux -S "$s" kill-server 2>/dev/null
+        %s "$s" || tmux -S "$s" kill-server 2>/dev/null
         rm -f "$s"
       fi
     done
     while kill -0 %d 2>/dev/null; do sleep 2; done
-    %s --wait %s || tmux -L %s kill-server 2>/dev/null
+    %s %s || tmux -L %s kill-server 2>/dev/null
     rm -f /private/tmp/tmux-*/%s /tmp/tmux-*/%s
   ]], prefix, prefix, prefix, teardown, pid, teardown, socket, socket, socket, socket)
   -- detach calls setsid, surviving the SIGHUP cascade through Nvim's group.

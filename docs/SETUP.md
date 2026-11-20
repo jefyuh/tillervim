@@ -20,7 +20,7 @@ The command targets the starter containing the script. Pass `--config /path/to/p
 
 **sync** uses the personal init, installs missing lazy.nvim plugins and Mason tools, and checks that selected parsers and CodeDiff's native library load. Missing prerequisites or failed targets produce a nonzero exit. Fix the reported issue and rerun. Disabled modules stop requesting their packages. Use lazy.nvim for upgrades and lockfile management.
 
-**doctor** checks the host, selected SDKs, CLIs, Codex login and HTTP key presence before loading any plugins. Missing core dependencies produce a nonzero exit. Optional tools, credentials and Java degradation are reported individually. Inside Neovim, `:checkhealth tillervim` reports effective plugin and tool health. `:AI info` lists configured transports and sessions.
+**doctor** checks the host, selected SDKs, CLIs and Codex login before loading any plugins. Missing core dependencies produce a nonzero exit. Optional tools, credentials and Java degradation are reported individually. Inside Neovim, `:checkhealth tillervim` reports effective plugin and tool health. `:AI info` lists configured transports and sessions.
 
 ## Profile fields
 
@@ -32,7 +32,7 @@ The command targets the starter containing the script. Pass `--config /path/to/p
 | `completion` | `local` enables Minuet ghost text with a separately provisioned llama-server and model. `off` skips Minuet. Ordinary completion works independently. |
 | `ai` | An array of the individual transport IDs below. An empty array disables the preset chats. |
 
-Existing configurations without a profile retain Solarized Osaka, Oil, all language modules, local ghost text and the original Codex/OpenAI transports. Omitted JSON fields inherit those defaults. Put ordinary keymaps in personal `lua/config/keymaps.lua`, and plugin keys, theme variants and advanced overrides in `lua/plugins/*.lua`. Restart after changing choices and sync new dependencies. See [personal configuration](../README.md#personal-configuration).
+Existing configurations without a profile retain Solarized Osaka, Oil, all language modules, local ghost text and the Codex terminal/ACP transports. Omitted JSON fields inherit those defaults. Put ordinary keymaps in personal `lua/config/keymaps.lua`, and plugin keys, theme variants and advanced overrides in `lua/plugins/*.lua`. Restart after changing choices and sync new dependencies. See [personal configuration](../README.md#personal-configuration).
 
 With Tokyo Night selected, a personal plugin spec can return `{ { "folke/tokyonight.nvim", opts = { style = "moon" } } }`. Everforest and Nord read upstream `vim.g` settings in the spec’s `init`.
 
@@ -59,9 +59,9 @@ For example, a personal profile can enable Python, the tree and both Kimi transp
 | [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | — | `copilot-acp` → `copilot --acp --stdio` |
 | [Mistral Vibe](https://docs.mistral.ai/vibe/code/use-vibe-in-other-ides) | — | `vibe-acp` → `vibe-acp` |
 
-`openai` selects the separate HTTP chat and inline editing transport. It reads `NVIM_OPENAI_API_KEY`. Keep keys in the environment or your credential manager. Diagnostics report presence only.
+Declare optional HTTP chat and inline-editing providers explicitly in personal `agent-workbench.nvim` `opts.providers`, setting `api_key` to `"$VAR"`, a literal secret, or `function() -> string|nil`. Diagnostics report availability without exposing secret values.
 
-Use `<Space>an` to start a session, `<Space>al` to switch, and `<Space>ac` to hide or show it. Each native agent keeps its own embedded PTY. Pasted file references and selections remain drafts. The additional CLIs use their own permissions, model selection and session history. Kimi supports a cold-start session picker, and all three additional native agents can continue their latest session. Codex also integrates the tmux renderer, external prompt editor, transcript reader and native round hooks. Choose the ACP transport for integrated chat review with the other agents. [Antigravity ACP](https://antigravity.google/docs/cli/acp) · [Kimi ACP](https://moonshotai.github.io/kimi-code/en/reference/kimi-acp.html) · [OpenCode ACP](https://opencode.ai/docs/cli/acp/)
+Use `<Space>an` to start a session, `<Space>al` to switch, and `<Space>ac` to hide or show it. Each native agent keeps its own embedded PTY. Pasted file references and selections remain drafts. The additional CLIs use their own permissions, model selection and session history; Antigravity launches with session-only `altScreenMode` enabled for flicker-free rendering and bounded viewport scrolling. Kimi supports a cold-start session picker, and all three additional native agents can continue their latest session. Codex also integrates the tmux renderer, external prompt editor, transcript reader and native round hooks. Choose the ACP transport for integrated chat review with the other agents. [Antigravity ACP](https://antigravity.google/docs/cli/acp) · [Kimi ACP](https://moonshotai.github.io/kimi-code/en/reference/kimi-acp.html) · [OpenCode ACP](https://opencode.ai/docs/cli/acp/)
 
 ## Machine dependencies
 

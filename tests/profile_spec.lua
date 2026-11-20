@@ -83,11 +83,10 @@ case "$*" in
   *) exit 3 ;;
 esac]=])
 vim.fn.setfperm(root .. "/codex", "rwx------")
-local login = run({ t.root .. "/starter/bin/tillervim", "--config", root, "setup", "--ai", "codex,openai", "--login" },
-  { env = { PATH = root .. ":" .. vim.env.PATH, NVIM_OPENAI_API_KEY = "offline-secret-for-presence-check" } })
+local login = run({ t.root .. "/starter/bin/tillervim", "--config", root, "setup", "--ai", "codex", "--login" },
+  { env = { PATH = root .. ":" .. vim.env.PATH } })
 t.eq(login.code, 0, "opt-in CLI login completes")
 t.eq(vim.fn.readfile(root .. "/login-calls"), { "login status", "login", "login status" }, "check, login and verify")
-local output = login.stdout .. login.stderr .. table.concat(vim.fn.readfile(path))
-t.ok(not output:find("offline-secret-for-presence-check", 1, true), "profile and diagnostics omit key values")
+t.ok(setup("--ai", "openai").code ~= 0, "HTTP providers are configured in personal Lua opts, not profile presets")
 vim.fn.delete(root, "rf")
 t.done()

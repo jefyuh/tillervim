@@ -12,7 +12,7 @@ for _, provider in ipairs({ "native", "snacks", "custom" }) do
   local env = vim.fn.environ()
   env.AGENT_PLUGIN_DIR, env.AGENT_TEST_PROVIDER, env.AGENT_TEST_TMP = plugin, provider, tmp
   env.AGENT_TEST_PYTHON, env.AGENT_SNACKS_DIR, env.AGENT_TEST_OUTPUT = python, snacks, output
-  env.CODEX_WRAP_TMUX, env.NVIM_AI_PLUGIN_DIR, env.NVIM = "0", "", nil
+  env.NVIM = nil
   local process = vim.system({ vim.v.progpath, "--headless", "-u", "NONE", "-i", "NONE", "-l", plugin .. "/tests/contract.lua" }, {
     text = true, env = env, clear_env = true,
   }):wait(15000)

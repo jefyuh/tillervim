@@ -1,5 +1,15 @@
+local launch = require("agent_workbench.backend.launch")
 local terminals = require("agent_workbench.terminal_provider")
 local M = {}
+
+local function terminal_env()
+  local env = launch.editor_env()
+  -- Bubble Tea v2 gates DEC 2026 synchronized output queries on TERM_PROGRAM
+  -- when :terminal sets TERM=xterm-256color. Guarantee a non-empty value so
+  -- embedded TUIs always batch frames without cursor flicker.
+  if (vim.env.TERM_PROGRAM or "") == "" then env.TERM_PROGRAM = "nvim" end
+  return env
+end
 
 function M.new(kind)
   local backend, session = {}, nil
@@ -24,7 +34,7 @@ function M.new(kind)
       local argv = vim.list_extend({ native.command }, native.args)
       vim.list_extend(argv, extra or {})
       local root = require("agent_workbench.context").project_root(vim.api.nvim_buf_get_name(0))
-      session = terminals.open(kind, { argv = argv, cwd = root, width = config.panel.width })
+      session = terminals.open(kind, { argv = argv, cwd = root, env = terminal_env(), width = config.panel.width })
     end
     local win = backend.window()
     for _, candidate in ipairs(vim.api.nvim_tabpage_list_wins(0)) do

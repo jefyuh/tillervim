@@ -12,15 +12,15 @@
 #
 # Shared daemons an agent may have started as a side effect -- an emulator, a
 # Gradle daemon, a container runtime -- are left alone together with their
-# children. NVIM_AGENT_TEARDOWN_IGNORE replaces that pattern; it is an awk ERE,
-# so spell a literal dot as [.]. It is only consulted from the agent's children
-# down: the pane's launcher and the agent itself are never spared, or a plugin
-# path with the wrong word in it would silently exempt the whole tree.
+# children. `--ignore PATTERN` replaces that pattern (from `opts.native.codex.teardown_ignore`);
+# it is an awk ERE, so spell a literal dot as [.]. It is only consulted from the
+# agent's children down: the pane's launcher and the agent itself are never spared,
+# or a plugin path with the wrong word in it would silently exempt the whole tree.
 #
 # Usage:
-#   agent-teardown SOCKET          `-L` name (or, with a slash, `-S` path) of the
-#                                  wrapper server; returns at once, works detached
-#   agent-teardown --wait SOCKET   the same, in the foreground
+#   agent-teardown [--ignore PATTERN] SOCKET          `-L` name (or, with a slash, `-S` path)
+#                                                     returns at once, works detached
+#   agent-teardown [--ignore PATTERN] --wait SOCKET   the same, in the foreground
 #
 # Both wrappers run the first form from their `client-detached` hook -- a hook's
 # run-shell job goes down with the server it is about to kill, hence the
@@ -33,12 +33,12 @@
 
 set -u
 
-IGNORE=${NVIM_AGENT_TEARDOWN_IGNORE:-'gradle|kotlin.*[Dd]aemon|crashpad_handler|qemu-system|/emulator/|adb .*fork-server|OrbStack|com[.]docker|ibtoold|CoreSimulator|SkyComputerUseClient'}
+IGNORE='gradle|kotlin.*[Dd]aemon|crashpad_handler|qemu-system|/emulator/|adb .*fork-server|OrbStack|com[.]docker|ibtoold|CoreSimulator|SkyComputerUseClient'
 GRACE=2
 LOG=${XDG_STATE_HOME:-$HOME/.local/state}/nvim/agent-teardown.log
 
 usage() {
-  echo "usage: agent-teardown [--wait] SOCKET" >&2
+  echo "usage: agent-teardown [--ignore PATTERN] [--wait] SOCKET" >&2
   exit 2
 }
 
@@ -66,7 +66,7 @@ tree_under() {
       while (head < tail) {
         pid = queue[++head]
         if (!(pid in parent) || pid == self) continue
-        if (depth[pid] >= 2 && command[pid] ~ ignore) { print "skip", pid, group[pid], command[pid]; continue }
+        if (depth[pid] >= 2 && ignore != "" && command[pid] ~ ignore) { print "skip", pid, group[pid], command[pid]; continue }
         print "hit", pid, group[pid], command[pid]
         m = split(children[pid], c, " ")
         for (j = 1; j <= m; j++) if (c[j] != "") { queue[++tail] = c[j]; depth[c[j]] = depth[pid] + 1 }
@@ -121,10 +121,29 @@ teardown() {
 }
 
 WAIT=0
-if [ "${1-}" = "--wait" ]; then
-  WAIT=1
-  shift
-fi
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --wait)
+      WAIT=1
+      shift
+      ;;
+    --ignore)
+      [ $# -ge 2 ] || usage
+      IGNORE=$2
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      usage
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 [ $# -eq 1 ] || usage
 SOCKET=$1
 case $SOCKET in
@@ -141,9 +160,9 @@ fi
 # Detach: the caller must not wait, and a hook's run-shell job goes down with
 # the server. A fresh session keeps the worker clear of any group-wide signal.
 if command -v perl >/dev/null 2>&1; then
-  nohup perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or exit 1' -- "$0" --wait "$SOCKET" \
+  nohup perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or exit 1' -- "$0" --ignore "$IGNORE" --wait "$SOCKET" \
     </dev/null >/dev/null 2>&1 &
 else
-  nohup "$0" --wait "$SOCKET" </dev/null >/dev/null 2>&1 &
+  nohup "$0" --ignore "$IGNORE" --wait "$SOCKET" </dev/null >/dev/null 2>&1 &
 fi
 exit 0

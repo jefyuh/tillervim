@@ -3,10 +3,16 @@
 -- Codex wrappers is tests/agent_hook_spec.lua's. No conversation, model
 -- request, MCP server or plugin hook is started.
 local t = dofile("tests/helper.lua")
+local options = require("agent_workbench.options")
 local plugins = require("agent_workbench.plugins")
 local root = vim.fn.tempname() .. " plug in 'quoted'"
 vim.fn.mkdir(root, "p")
-local saved = { dirs = vim.env.NVIM_AI_PLUGIN_DIR, home = vim.env.CODEX_HOME, path = vim.env.PATH }
+local saved = { home = vim.env.CODEX_HOME, path = vim.env.PATH }
+local restore_opts = options._patch({ plugin_dirs = {} })
+local function set_dirs(list)
+  restore_opts()
+  restore_opts = options._patch({ plugin_dirs = list })
+end
 local function write(file, value)
   vim.fn.mkdir(vim.fs.dirname(file), "p")
   local content = type(value) == "table" and vim.json.encode(value) or value
@@ -28,10 +34,10 @@ fixture(bundle .. "/claude/demo", "claude", "demo")
 fixture(bundle .. "/codex/demo", "codex", "demo")
 fixture(compat, "claude", "compatible")
 
-vim.env.NVIM_AI_PLUGIN_DIR = ""
+set_dirs({})
 t.eq(plugins.claude_args(), {}, "unset/empty plugin dirs leave Claude unchanged")
 t.eq(plugins.codex_args(), {}, "empty plugin dirs need no Codex installation")
-vim.env.NVIM_AI_PLUGIN_DIR = " , " .. bundle .. ",," .. compat .. "," .. compat .. "/, "
+set_dirs({ " ", " " .. bundle .. " ", "", compat, compat .. "/" })
 t.eq(plugins.resolve("claude"), {
   { name = "demo", path = bundle .. "/claude/demo" }, { name = "compatible", path = compat },
 }, "Claude selects its own distribution package and deduplicates a repeated directory")
@@ -40,15 +46,15 @@ t.eq(plugins.resolve("codex"), {
 }, "Codex selects its own package and accepts a Claude-compatible plugin")
 t.eq(plugins.claude_args(), { "--plugin-dir", bundle .. "/claude/demo", "--plugin-dir", compat },
   "Claude receives repeated plugin flags without premature shell escaping")
-local dirs = vim.env.NVIM_AI_PLUGIN_DIR
-vim.env.NVIM_AI_PLUGIN_DIR = root .. "/missing"
+local dirs = { bundle, compat }
+set_dirs({ root .. "/missing" })
 local ok, err = pcall(plugins.resolve, "codex")
 t.ok(not ok and tostring(err):find("directory not found", 1, true), "missing plugin paths fail explicitly")
 fixture(root .. "/duplicate", "claude", "compatible")
-vim.env.NVIM_AI_PLUGIN_DIR = compat .. "," .. root .. "/duplicate"
+set_dirs({ compat, root .. "/duplicate" })
 ok, err = pcall(plugins.resolve, "codex")
 t.ok(not ok and tostring(err):find("duplicate codex plugin name", 1, true), "a name collision cannot silently replace another plugin")
-vim.env.NVIM_AI_PLUGIN_DIR = dirs
+set_dirs(dirs)
 
 if vim.fn.executable("codex") == 1 then
   local home = root .. "/codex-home"
@@ -158,6 +164,7 @@ else
   t.ok(true, "Codex is not installed; native discovery checks skipped")
 end
 
-vim.env.NVIM_AI_PLUGIN_DIR, vim.env.CODEX_HOME, vim.env.PATH = saved.dirs, saved.home, saved.path
+restore_opts()
+vim.env.CODEX_HOME, vim.env.PATH = saved.home, saved.path
 vim.fn.delete(root, "rf")
 t.done()

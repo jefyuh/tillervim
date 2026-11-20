@@ -25,8 +25,12 @@ function M.start_codex(root)
   vim.fn.mkdir(bin, "p")
   vim.fn.writefile({ "#!/bin/sh", "exec cat" }, bin .. "/codex")
   vim.fn.setfperm(bin .. "/codex", "rwx------")
-  local saved = { PATH = vim.env.PATH, CODEX_WRAP_TMUX = vim.env.CODEX_WRAP_TMUX, NVIM_AI_PLUGIN_DIR = vim.env.NVIM_AI_PLUGIN_DIR }
-  vim.env.PATH, vim.env.CODEX_WRAP_TMUX, vim.env.NVIM_AI_PLUGIN_DIR = bin .. ":" .. saved.PATH, "0", ""
+  local saved_path = vim.env.PATH
+  vim.env.PATH = bin .. ":" .. saved_path
+  local restore_opts = require("agent_workbench.options")._patch({
+    native = { codex = { wrap_tmux = false } },
+    plugin_dirs = {},
+  })
   local cwd = vim.fn.getcwd()
   vim.cmd.lcd(vim.fn.fnameescape(root))
   local agent = require("agent_workbench")
@@ -35,9 +39,8 @@ function M.start_codex(root)
   assert(vim.wait(2000, function() return agent.session("codex").alive end, 10), "offline Codex PTY did not start")
   return session, function()
     agent.stop("codex")
-    for key, value in pairs(saved) do vim.env[key] = value end
-    if saved.CODEX_WRAP_TMUX == nil then vim.env.CODEX_WRAP_TMUX = nil end
-    if saved.NVIM_AI_PLUGIN_DIR == nil then vim.env.NVIM_AI_PLUGIN_DIR = nil end
+    restore_opts()
+    vim.env.PATH = saved_path
     vim.cmd.lcd(vim.fn.fnameescape(cwd))
     vim.fn.delete(bin, "rf")
   end

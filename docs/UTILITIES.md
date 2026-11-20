@@ -207,7 +207,7 @@ Structured logging framework with level control and history.
 - **Message Formatting**: Printf-style string formatting
 - **History Tracking**: Keeps recent log entries for debugging
 - **Safe Execution**: `safe_call()` for error handling
-- **Environment Integration**: Configurable via `NVIM_LOG_LEVEL`
+- **Opts Configuration**: Configurable via `editor-core.nvim` `opts.log_level`
 
 #### API Reference
 
@@ -238,10 +238,8 @@ logger.clear_history()                  -- Clear all history
 
 #### Configuration
 
-```bash
-# Environment variables
-export NVIM_LOG_LEVEL=DEBUG    # Set logging level
-export NVIM_DEV=1              # Enable development logging
+```lua
+{ "editor-core.nvim", opts = { log_level = "DEBUG" } } -- DEBUG|INFO|WARN|ERROR
 ```
 
 ## Dashboard rendering and GitHub content
@@ -310,12 +308,12 @@ local input_method = require("editor_core.input_method")
 
 local source, origin = input_method.default_source()
 -- source: e.g. "com.apple.keylayout.ABC"
--- origin: "NVIM_ENGLISH_INPUT_SOURCE" or "macOS keyboard layout"
+-- origin: "editor_core.input_method.source" or "macOS keyboard layout"
 ```
 
 Resolution order:
 
-1. `NVIM_ENGLISH_INPUT_SOURCE`, when non-empty.
+1. `opts.input_method.source` on `editor-core.nvim`, when configured.
 2. An enabled keyboard layout from `AppleEnabledInputSources`, preferring a
    Latin one (`ABC`, `US`, `Colemak`, `British`, …). That list is in the user's
    own order, so its first layout may be non-Latin — and Normal mode on a
@@ -340,7 +338,7 @@ requests are serialized and do not replace a pending CJK restoration with the
 already-active Normal layout. (`help` and `man` keep their buffer-local builtin
 `<C-]>`; `<C-\>` remains available there.)
 
-`NVIM_MACISM_WAIT_TIME_MS` is passed as macism's optional third argument on
+`opts.input_method.wait_time_ms` on `editor-core.nvim` is passed as macism's optional third argument on
 source switches. Leave it unset for macism's built-in wait (currently 150ms),
 set it to a positive millisecond value to shorten that wait, or set it to `0`
 to disable the temporary focus-stealing window. Disabling the workaround removes
@@ -607,6 +605,14 @@ terminal.focus(count)
 -- (vim.g.terminal_position = "bottom"). edgy asks it, so its bottom slot
 -- claims no terminal that is meant to float.
 terminal.floats()
+
+-- Clamp a terminal window's topline to at most line('$') - win_height + 1 so
+-- Normal-mode downward scrolling never exposes empty EndOfBuffer rows below the
+-- bottom terminal line. Driven by WinScrolled; attach_scroll_clamp(buf) also
+-- disables Snacks smooth scroll and clamps buffer-local Normal downward keys
+-- (<ScrollWheelDown>, <C-e>, <C-d>, <C-f>, <PageDown>) on TermOpen.
+terminal.clamp_scroll(win)
+terminal.attach_scroll_clamp(buf)
 ```
 
 Native coding-agent terminals do not run `fix_drift()` on `TermEnter`, avoiding
@@ -1185,8 +1191,7 @@ Live state is separate: state.use_key selects an HTTP profile and updates the
 inline/cmd adapter observations; native sessions live in terminal_provider,
 chat routing in slot, review owners in review.rounds. A copied setup snapshot
 cannot mutate these by editing the original declaration or a returned table.
-A nonempty env NVIM_AI_KEY_PROFILE > vim.g.ai_key_profile > opts.key_profile
-sets startup preference. auto resolves again on each explicit selection.
+`opts.key_profile` sets startup preference. `auto` resolves again on each explicit selection.
 
 Providers have unique name/label, optional cli_api_key, and any of:
 
@@ -1194,7 +1199,7 @@ Providers have unique name/label, optional cli_api_key, and any of:
 - `acp = { adapter, command, auth_method? }`, CLI bridge/subscription;
 - `api = { adapter, api_key, name?, label?, model? }`, HTTP/API credits.
 
-`api_key` must name NVIM_*. Built-in Anthropic/OpenAI adapter safeguards also
+`api_key` accepts `"$VAR"` (environment variable), a literal secret string, or `function() -> string|nil` (never a CLI billing variable). Built-in Anthropic/OpenAI adapter safeguards also
 cover restored chats; builtin Codex ACP defaults to chat-gpt authentication.
 No code writes billing variables. backends() yields native, ACP, HTTP in provider
 order and reports availability and billing. Missing CLI/bridge/key entries are
@@ -1459,11 +1464,14 @@ them. Nvim only forwards a mouse event to a terminal job that asked for mouse
 reporting, and neither TUI asks, so Nvim handled the click itself — which means
 leaving Terminal-mode, and made a click that merely returned focus to the
 terminal window look like a random drop into Normal mode. Clicks on another
-window still move there. This applies to the unwrapped path only: under the tmux
-wrapper tmux enables mouse reporting, so Nvim forwards and Terminal-mode
-survives on its own, and mapping there would take the click away from tmux's
-copy-mode. The wrapper is detected from the command recorded on the buffer,
-since who enables the mouse is the only reason that distinction matters.
+window still move there. This applies only to unwrapped inline panels whose TUI
+does not request mouse reporting: under the tmux wrapper (`set-option -g mouse on`)
+or an alternate-screen TUI that enables mouse reporting itself (Antigravity's
+`altScreenMode`, OpenCode), Nvim forwards clicks, drags and wheel events and
+Terminal-mode survives on its own, while mapping clicks there would steal mouse
+selection and click-to-expand from the TUI. Unwrapped inline panels also swallow
+downward wheel ticks inside the panel while in Terminal-mode so rolling down at
+the live bottom does not drop into Normal mode.
 
 Scrolling from terminal-Normal mode is forwarded into the pane, and terminal
 input is restored afterwards. This is the wrapped path's counterpart to the
@@ -1618,7 +1626,7 @@ still alive. Shared daemons -- emulator, Gradle daemon, container runtime -- are
 spared together with their children, but only from the agent's children down:
 the launcher and the agent itself are never exempt, or a plugin path with the
 wrong word in it would silently spare the whole tree.
-`NVIM_AGENT_TEARDOWN_IGNORE` replaces the pattern (an awk ERE). Each run is
+`opts.native.codex.teardown_ignore` replaces the pattern (an awk ERE, passed via `--ignore`). Each run is
 logged to `~/.local/state/nvim/agent-teardown.log`.
 
 `destroy-unattached` is off in both wrappers on purpose. With it on, the session

@@ -92,8 +92,8 @@ end
 				-- Visual selection size (`3x12`). Nvim fills %S on every redraw.
 				"%S",
 				-- The API key profile, only while one is pinned (:AI key <name>,
-				-- NVIM_AI_KEY_PROFILE): `auto` is the first provider whose key is
-				-- set, so it needs no reminder. A click reopens the key picker.
+				-- opts.key_profile): `auto` is the first provider whose key is
+				-- configured, so it needs no reminder. A click reopens the key picker.
 				{
 					function()
 						return ("󰌆 %s"):format(require("agent_workbench.state").key.label)

@@ -95,12 +95,12 @@ report covers:
   parser with `tree-sitter build`, so a missing CLI or one below its 0.26.1
   floor is an error — no parser can install or update
 - The macOS Normal-mode input source and whether it came from
-  `NVIM_ENGLISH_INPUT_SOURCE` or the system keyboard-layout fallback
+  `editor_core.input_method.source` or the system keyboard-layout fallback
 - *config: AI backends*: the HTTP key profile; every native CLI, then every
   ACP bridge, in the effective agent-workbench options, in their order
   (a missing one is a warning: the new-chat picker leaves it out and the rest
-  still work); every key profile's variable
-  (`NVIM_OPENAI_API_KEY` in the default profile; unset is a
+  still work); every configured HTTP key profile (`$VAR` presence, inline key,
+  or lazy function resolver; an unset `$VAR` is a
   warning for the current profile, information for the rest); an error only
   when configured providers have no available transport (an empty provider list is reported as disabled); and
   a warning while a provider's own CLI variable (`ANTHROPIC_API_KEY` /
@@ -151,11 +151,11 @@ plugin's own checks).
   Insert only if that switch succeeded. Repeating the chord is harmless.
 - **Ghostty's window chrome flashes when returning to input mode** — macism's
   default CJK workaround creates a temporary key window, so Ghostty briefly
-  loses and regains focus. Set `NVIM_MACISM_WAIT_TIME_MS=0` before starting Nvim
-  to skip that window.
+  loses and regains focus. Set `opts.input_method.wait_time_ms = 0` on
+  `editor-core.nvim` to skip that window.
 - **The first Chinese characters arrive as English after disabling the flash** —
-  the macism workaround was needed on this machine. Unset
-  `NVIM_MACISM_WAIT_TIME_MS` (or set it to `150`) and restart Nvim to restore the
+  the macism workaround was needed on this machine. Remove `wait_time_ms` (or
+  set `opts.input_method.wait_time_ms = 150`) and restart Nvim to restore the
   reliable path.
 
 ## LSP
@@ -347,7 +347,7 @@ old fixture or document; Claude protocol support is a later extension.
   plugin options are `require("agent_workbench").options()`. `:AI info` /
   `:AIInfo` show provider order, transport/billing, availability, open chats,
   HTTP profile and CLI billing keys. `:checkhealth tillervim` aggregates owner checks.
-- **No backend is offered.** Check the executable for the chosen transport. Only Codex ACP needs `codex-acp`. Antigravity, Kimi and OpenCode use their CLI for both transports. The default HTTP profile needs `NVIM_OPENAI_API_KEY`. Omitted provider parts are not
+- **No backend is offered.** Check the executable for the chosen transport. Only Codex ACP needs `codex-acp`. Antigravity, Kimi and OpenCode use their CLI for both transports. HTTP profiles are declared explicitly in personal `agent-workbench.nvim` `opts.providers`. Omitted provider parts are not
   offered. The ordered picker groups native/ACP/HTTP and hides unavailable
   entries. With no configured HTTP API, inline/cmd prompts refuse with a notice.
 - **Selected terminal cannot open.** `terminal.provider` is native, Snacks, or a
@@ -377,10 +377,11 @@ old fixture or document; Claude protocol support is a later extension.
   into an existing draft/approval. Exit it before resuming another. am can submit
   /model only into a fresh session. Cold launches always use the editor file's
   root, even if an old exited terminal remains on screen.
-- **HTTP billing/profile.** `NVIM_*` variables are HTTP keys. `OPENAI_API_KEY`
+- **HTTP billing/profile.** HTTP profiles resolve their configured `api_key` (`"$VAR"`,
+  literal string or `function`), never CLI billing variables. `OPENAI_API_KEY`
   belongs to the CLI and may override subscription billing; health/pickers warn.
-  Codex ACP uses chat-gpt auth. A nonempty NVIM_AI_KEY_PROFILE wins over vim.g
-  then config; auto resolves the first configured key that is set. AI key auto
+  Codex ACP uses chat-gpt auth. `opts.key_profile` sets the startup profile; `auto`
+  resolves the first configured key. `AI key auto`
   re-resolves. No key or provider choice persists or writes environment values.
   A profile switch changes inline/cmd adapters only; existing chats stay fixed.
 - **Chat busy / draft not delivered.** Tool-loop intervals are still busy even
@@ -392,7 +393,12 @@ old fixture or document; Claude protocol support is a later extension.
   resuming a stateful ACP session with /resume is separate. CodeCompanion's own
   code review is disabled so it cannot create a second baseline system.
 - **Rendering/scrolling/cleanup.** The Codex wrapper composes TUI synchronized
-  updates in tmux; CODEX_WRAP_TMUX=0 gives a direct comparison. Renderer and
+  updates in tmux; `opts.native.codex.wrap_tmux = false` gives a direct comparison. Antigravity
+  defaults to session-only `--settings '{"altScreenMode":true}'` so its TUI
+  renders on the alternate screen without inline scrollback cursor jumps and
+  handles wheel scrolling within its own viewport; Normal-mode downward
+  scrolling in `:terminal` windows is also clamped at the bottom row so
+  buffers cannot scroll into empty `EndOfBuffer` space. Renderer and
   terminal provider are independent. Keep EDITOR/VISUAL/NVIM forwarding,
   agent-run, agent-teardown, exit-empty and destroy-unattached off. A nonzero
   startup stays visible; stop/quitting cleans the owned server and descendants.
@@ -1200,13 +1206,6 @@ provider: none is chosen at launch.
 
 | Variable | Effect |
 |----------|--------|
-| `NVIM_AI_PLUGIN_DIR` | Comma-separated plugin directories or host distribution roots for native Codex. It refreshes a local marketplace and enables plugins for that invocation, without changing global configuration. `tillervim.config.ai.plugin_dirs` is the data-file alternative; CodeCompanion ACP/API plugin injection is deferred |
-| `NVIM_AI_KEY_PROFILE` | Startup HTTP key profile (`auto` by default: the first profile in `lua/tillervim/config/ai.lua` whose `NVIM_*` key is set, else the first); an unknown name warns and falls back to `auto`; `:AI key` switches it |
-| `NVIM_ANTHROPIC_API_KEY` / `NVIM_OPENAI_API_KEY` | Key of the default `anthropic` / `openai` profile, and of CodeCompanion's built-in `anthropic` / `openai` adapters even when no provider lists them, for CodeCompanion API chat and Inline/command prompts; unset, those keys refuse instead of sending |
-| `NVIM_ENGLISH_INPUT_SOURCE` | Override the macOS keyboard layout used in Normal and Terminal-Normal modes |
-| `NVIM_MACISM_WAIT_TIME_MS` | Set macism's CJK workaround wait; `0` disables its temporary focus window |
-| `NVIM_LOG_LEVEL` | `editor_core.logger` threshold (`DEBUG`/`INFO`/`WARN`/`ERROR`) |
-| `NVIM_DEV=1` | `editor_core.logger` defaults to `DEBUG` (more verbose) |
 | `VSCODE_DIFF_NO_AUTO_INSTALL` | Any non-empty value: CodeDiff never downloads its native library; a missing one is an error when the plugin loads. `tests/run.sh` sets it |
 | `CODEDIFF_WATCHER_NO_AUTO_INSTALL=1` | CodeDiff never downloads its file watcher; the views poll instead. `tests/run.sh` sets it |
 | `CODEDIFF_WATCHER_PATH` | A `codediff-watcher` binary to use instead of the downloaded one |

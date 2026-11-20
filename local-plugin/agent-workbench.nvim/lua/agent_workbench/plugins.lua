@@ -39,9 +39,7 @@ function M.resolve(host)
     paths[real], names[plugin.name] = true, true
     plugins[#plugins + 1] = plugin
   end
-  local directories = vim.env.NVIM_AI_PLUGIN_DIR ~= nil
-    and vim.split(vim.env.NVIM_AI_PLUGIN_DIR, ",", { trimempty = true })
-    or require("agent_workbench.options").get().plugin_dirs
+  local directories = require("agent_workbench.options").get().plugin_dirs
   for _, configured in ipairs(directories) do
     local trimmed = vim.trim(configured)
     if trimmed ~= "" then

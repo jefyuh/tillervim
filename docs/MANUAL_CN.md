@@ -849,18 +849,17 @@ HTTP chat 接收 buffer 文本。目录列表明确拒绝，本期没有 Claude 
 写入命令。`at`/`aT` 阅读 Codex JSONL transcript，独立于终端滚动历史。
 
 个人 `tillervim.json` 选择入口。自定义 provider、HTTP profile、面板宽度、启动参数和本地插件目录在个人 `lua/plugins/` 的 `agent-workbench.nvim` spec 中配置。
-`terminal.provider` 可为 `native`、`snacks` 或自定义内嵌 adapter。tmux 渲染独立选择，
-`CODEX_WRAP_TMUX=0` 关闭。runner/watchdog/teardown 保留启动错误、CJK、滚动历史，
+`terminal.provider` 可为 `native`、`snacks` 或自定义内嵌 adapter。tmux 渲染独立选择（`opts.native.codex.wrap_tmux = false` 关闭）。runner/watchdog/teardown 保留启动错误、CJK、滚动历史，
 清理所属后代进程；不写 CLI 配置。
 
 `ae` 消耗 HTTP API credits；`ax` / `:AI key` 只切当前进程的 HTTP profile，
-不动终端和已有 chat。默认 OpenAI key 为 `NVIM_OPENAI_API_KEY`；CLI 自己的
+不动终端和已有 chat。HTTP API provider 在个人配置的 `opts.providers` 中显式声明（`api_key` 支持 `"$VAR"`、字面量或 `function() -> string|nil`）；CLI 自己的
 `OPENAI_API_KEY` 可能改变计费并会提示。Codex ACP 使用 `chat-gpt` 登录，不静默借用 CLI key。
 详见 [AI 快捷键](../README_CN.md#常用按键)。
 
 ### 原生终端的本地插件
 
-个人 `agent-workbench.nvim` spec 的 `opts.plugin_dirs` 声明目录，`NVIM_AI_PLUGIN_DIR` 覆盖。
+个人 `agent-workbench.nvim` spec 的 `opts.plugin_dirs` 声明目录。
 入口可为插件目录或带 `codex/<plugin>` 的分发根目录。只在启动原生 Codex 时解析，
 不在 Nvim 启动或 CodeCompanion 启动时安装。Codex 使用临时 `CODEX_HOME` 运行
 `plugin add` 刷新快照，仅共享真实 plugin cache；marketplace/enabled 覆盖只属于本次调用，
@@ -874,9 +873,9 @@ HTTP chat 接收 buffer 文本。目录列表明确拒绝，本期没有 Claude 
 | Antigravity、Kimi Code、OpenCode 终端 | 内嵌 CLI / 对应账号 | 交互会话、文件引用、草稿文本 |
 | 其他 ACP 聊天 | CodeCompanion / 对应账号 | 使用所选 Agent 聊天和审阅 |
 | Codex ACP chat | CodeCompanion + codex-acp / ChatGPT 登录 | 带 CLI 工具的 chat UI |
-| OpenAI API chat / inline | HTTP / API credits | 对话或 `ae` 行内编辑 |
+| HTTP API chat / inline | HTTP / API credits | 对话或 `ae` 行内编辑（在个人 `opts.providers` 中显式声明） |
 
-Picker 标明区别和可用性。HTTP key 读取 `NVIM_*`；chat 创建后 adapter 固定。
+Picker 标明区别和可用性。HTTP key 按各 profile 的 `api_key` 解析；chat 创建后 adapter 固定。
 本地 transcript history 与 `/resume` 恢复 ACP agent 有状态会话是两回事。
 
 幽灵文本是独立的第四条路径：本地 llama-server，只在附着 UI 且文件符合条件时启动。

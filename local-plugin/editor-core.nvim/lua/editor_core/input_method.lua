@@ -3,9 +3,8 @@
 -- owns only Neovim's mode transitions and the previous-source state.
 local M = {}
 
-local env_name = "NVIM_ENGLISH_INPUT_SOURCE"
-local wait_env_name = "NVIM_MACISM_WAIT_TIME_MS"
 local defaults_key = "AppleCurrentKeyboardLayoutInputSourceID"
+local configured = { source = nil, wait_time_ms = nil }
 local controller
 local registered
 
@@ -15,14 +14,25 @@ local function source_id(value)
   return value ~= "" and value or nil
 end
 
----Resolve the target keyboard layout, preferring an explicit environment value.
----@param configured string|nil
+---Configure explicit Normal-mode input source and macism wait time from opts.
+---@param opts? { source?: string, wait_time_ms?: integer }
+function M.configure(opts)
+  opts = opts or {}
+  configured = {
+    source = source_id(opts.source),
+    wait_time_ms = opts.wait_time_ms,
+  }
+  controller = nil
+end
+
+---Resolve the target keyboard layout, preferring an explicit opts value.
+---@param explicit string|nil
 ---@param detect fun(): string|nil
 ---@return string|nil source
 ---@return string|nil origin
-function M._resolve_default_source(configured, detect)
-  local source = source_id(configured)
-  if source then return source, env_name end
+function M._resolve_default_source(explicit, detect)
+  local source = source_id(explicit)
+  if source then return source, "editor_core.input_method.source" end
 
   source = source_id(detect())
   if source then return source, "macOS keyboard layout" end
@@ -95,7 +105,7 @@ end
 ---@return string|nil source
 ---@return string|nil origin
 function M.default_source()
-  return M._resolve_default_source(vim.env[env_name], detect_keyboard_layout)
+  return M._resolve_default_source(configured.source, detect_keyboard_layout)
 end
 
 function M._command_succeeded(result)
@@ -288,7 +298,7 @@ local function resolve()
     controller = default and M._new({
       command = "macism",
       default_source = default,
-      wait_time = vim.env[wait_env_name],
+      wait_time = configured.wait_time_ms,
       run = system_run,
     }) or false
   end

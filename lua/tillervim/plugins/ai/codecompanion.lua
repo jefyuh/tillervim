@@ -1,6 +1,12 @@
 return {
   "olimorris/codecompanion.nvim",
-  enabled = require("tillervim.profile").companion,
+  enabled = function()
+    if require("tillervim.profile").companion then return true end
+    local p = require("lazy.core.config").plugins["agent-workbench.nvim"]
+    local ok, opts = pcall(function() return p and require("lazy.core.plugin").values(p, "opts", false) end)
+    return ok and type(opts) == "table"
+      and vim.iter(opts.providers or {}):any(function(entry) return entry.acp ~= nil or entry.api ~= nil end)
+  end,
   cmd = {
     "CodeCompanion",
     "CodeCompanionActions",
@@ -25,19 +31,19 @@ return {
   opts = function()
     local ai = require("agent_workbench.state")
 
-    -- Every key profile reads its own NVIM_* variable, never the one the agent
-    -- CLIs bill against (lua/tillervim/config/ai.lua). The two built-in adapters are
-    -- redirected whichever providers are listed, so a restored chat or an
-    -- upstream path naming one never reads a CLI's variable; a provider's
-    -- `api` naming the built-in itself sets its own key over that.
+    -- Every HTTP profile resolves its own configured api_key ($VAR, literal or
+    -- function), never the variables the agent CLIs bill against. Built-in
+    -- HTTP adapters default to an empty resolver when unconfigured so restored
+    -- chats or upstream paths never silently consume OPENAI_API_KEY or ANTHROPIC_API_KEY.
     local http = { extend = {} }
-    for adapter, var in pairs(ai.builtin_http_keys) do
-      http.extend[adapter] = { env = { api_key = var } }
+    for _, adapter in ipairs(ai.builtin_http_adapters) do
+      http.extend[adapter] = { env = { api_key = function() return "" end } }
     end
     for _, name in ipairs(ai.key_names()) do
       local profile = ai.key_profiles[name]
+      local env = { api_key = function() return profile.key_spec.resolve() or "" end }
       if name == profile.adapter then
-        http.extend[name] = { env = { api_key = profile.api_key } }
+        http.extend[name] = { env = env }
       else
         -- An adapter of its own name, so a chat restored from history comes
         -- back on this profile rather than on the plain built-in one.
@@ -45,7 +51,7 @@ return {
           return require("codecompanion.adapters.http").extend(profile.adapter, {
             name = name,
             formatted_name = profile.label,
-            env = { api_key = profile.api_key },
+            env = env,
           })
         end
       end

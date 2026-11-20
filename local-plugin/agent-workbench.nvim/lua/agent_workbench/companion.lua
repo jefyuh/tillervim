@@ -80,8 +80,11 @@ function M.preflight(what)
   if not spec then
     problem = "no provider offers an API key\nsee :checkhealth agent_workbench"
   elseif spec.kind == "http" then
-    if (vim.env[spec.api_key] or "") == "" then
-      problem = ("%s is not set\nnothing sent: export it, or :AI key <profile>"):format(spec.api_key)
+    local val, err = spec.key_spec.resolve()
+    if not val then
+      local hint = spec.key_spec.source == "env" and ("export %s, or :AI key <profile>"):format(spec.key_spec.var)
+        or "check api_key, or :AI key <profile>"
+      problem = ("%s\nnothing sent: %s"):format(err, hint)
     end
   elseif vim.fn.executable(spec.command) ~= 1 then
     problem = ("%s not found — no agent chat\nsee :checkhealth agent_workbench"):format(spec.command)

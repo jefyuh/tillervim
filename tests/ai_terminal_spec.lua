@@ -64,6 +64,8 @@ t.eq(vim.fn.maparg("<Esc>", "t", false, true).buffer, 1,
   "Esc is buffer-local on the panel, so it reaches the agent instead of <Esc><Esc>")
 t.ok(buffer_local("<LeftMouse>"),
   "an unwrapped panel guards the mouse, so a click inside it keeps Terminal-mode")
+t.ok(buffer_local("<ScrollWheelDown>"),
+  "an unwrapped inline panel swallows Terminal-mode wheel-down at the live bottom")
 t.ok(not buffer_local_n("<PageUp>"),
   "an unwrapped panel leaves scrolling to Nvim, which owns the scrollback there")
 
@@ -216,6 +218,57 @@ end
 vim.b[plain].snacks_terminal = nil
 t.eq(ai_term.agent_of(plain), "codex", "agent identity survives removing Snacks metadata")
 t.eq(require("agent_workbench").session_of_buffer(plain).kind, "codex", "host UI uses the same public identity")
+
+-- Alternate-screen TUIs (Antigravity's default altScreenMode, OpenCode) enable
+-- mouse reporting themselves, so clicks must pass through instead of being
+-- swallowed by keep_terminal_mode_on_click; inline Antigravity (args = {})
+-- still gets the click guard.
+do
+  local defaults = require("agent_workbench").options().native.antigravity
+  t.eq(defaults.args, { "--settings", '{"altScreenMode":true}' },
+    "Antigravity defaults to session-only altScreenMode to prevent inline cursor flicker")
+
+  local prev = config.agents.antigravity
+  config._set_providers({
+    { name = "codex", label = "Codex", tui = { kind = "codex" } },
+    { name = "antigravity", label = "Antigravity", tui = { kind = "antigravity" } },
+    { name = "opencode", label = "OpenCode", tui = { kind = "opencode" } },
+  })
+  local function open_kind(kind, cmd)
+    local term = require("snacks").terminal.open({ bin }, {
+      auto_insert = true,
+      start_insert = true,
+      win = { position = "right", width = 0.4, keys = { term_normal = false },
+        on_buf = function(win)
+          vim.b[win.buf].agent_workbench = { id = "native:" .. kind, kind = kind, cmd = cmd, cwd = vim.fn.getcwd() }
+        end,
+      },
+    })
+    vim.wait(2000, function() return vim.bo[term.buf].buftype == "terminal" end)
+    return term.buf
+  end
+
+  local agy_alt = open_kind("antigravity", { "agy", "--settings", '{"altScreenMode":true}' })
+  t.eq(vim.fn.maparg("<Esc>", "t", false, true).buffer, 1, "Antigravity altscreen still passes Esc through")
+  t.ok(not buffer_local("<LeftMouse>"), "Antigravity altscreen leaves mouse clicks to the TUI")
+  t.ok(not buffer_local("<ScrollWheelDown>"), "Antigravity altscreen leaves wheel-down to the TUI")
+
+  local agy_inline = open_kind("antigravity", { "agy" })
+  t.ok(buffer_local("<LeftMouse>"), "inline Antigravity (args = {}) keeps the click guard")
+  t.ok(buffer_local("<ScrollWheelDown>"), "inline Antigravity keeps the wheel-down bottom guard")
+
+  local oc = open_kind("opencode", { "opencode" })
+  t.ok(not buffer_local("<LeftMouse>"), "OpenCode leaves mouse clicks to its alternate-screen TUI")
+
+  for _, b in ipairs({ agy_alt, agy_inline, oc }) do
+    pcall(vim.fn.jobstop, vim.bo[b].channel)
+    pcall(vim.api.nvim_buf_delete, b, { force = true })
+  end
+  if not prev then
+    config._set_providers(require("agent_workbench").options().providers)
+  end
+end
+
 t.eq(require("lazy.core.config").plugins["claudecode.nvim"], nil, "no Claude integration is installed by this config")
 t.eq(vim.fn.exists(":ClaudeCode"), 0, "no Claude launch command remains")
 local file = vim.api.nvim_create_buf(false, true)

@@ -13,7 +13,7 @@ function M.check()
       health.ok(("Normal-mode source is %s (%s)"):format(source, origin))
     else
       health.warn("Normal-mode input source could not be detected",
-        { "Set NVIM_ENGLISH_INPUT_SOURCE to a macOS input-source ID" })
+        { "Set opts.input_method.source on editor-core.nvim to a macOS input-source ID" })
     end
   end
 

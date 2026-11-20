@@ -242,15 +242,22 @@ function M.check()
 
   local function is_set(var) return vim.env[var] ~= nil and vim.env[var] ~= "" end
   for _, name in ipairs(ai.key_names()) do
-    local var = ai.key_profiles[name].api_key
-    if is_set(var) then
+    local profile = ai.key_profiles[name]
+    local ks = profile.key_spec
+    if ks.source == "function" then
       any = true
-      health.ok(("%s found — key profile %s can run API chats and inline/command prompts"):format(var, name))
+      health.ok(("key profile %s uses a function resolver — evaluated on demand"):format(name))
+    elseif ks.source == "value" then
+      any = true
+      health.ok(("key profile %s uses an inline key — can run API chats and inline/command prompts"):format(name))
+    elseif ks.configured() then
+      any = true
+      health.ok(("%s found — key profile %s can run API chats and inline/command prompts"):format(ks.display, name))
     elseif name == ai.key.name then
-      health.warn(("%s not set — native and ACP chats work; inline edits refuse until it is set"):format(var),
-        { "See README.md, API keys" })
+      health.warn(("%s not set — native and ACP chats work; inline edits refuse until it is set"):format(ks.display),
+        { "Export " .. ks.var .. " or configure api_key on agent-workbench.nvim" })
     else
-      health.info(("%s not set — no %s API chat until it is"):format(var, name))
+      health.info(("%s not set — no %s API chat until it is"):format(ks.display, name))
     end
   end
 
@@ -268,7 +275,7 @@ function M.check()
     local cli_key = provider.cli_api_key
     if cli_key and is_set(cli_key) then
       health.warn(("%s is set — %s started from this Nvim can bill the API instead of the subscription")
-        :format(cli_key, provider.label), { "Unset it unless API billing is intended; Nvim reads NVIM_* keys" })
+        :format(cli_key, provider.label), { "Unset it unless API billing is intended; configure HTTP keys in agent-workbench.nvim" })
     elseif cli_key then
       health.ok(("%s not set — %s uses its subscription login"):format(cli_key, provider.label))
     end

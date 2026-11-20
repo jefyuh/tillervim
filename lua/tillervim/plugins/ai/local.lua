@@ -37,7 +37,7 @@ return {
   opts = function()
     local opts = vim.deepcopy(require("tillervim.config.ai"))
     local codex = opts.providers[1]
-    local parts = { codex = "tui", ["codex-acp"] = "acp", openai = "api" }
+    local parts = { codex = "tui", ["codex-acp"] = "acp" }
     local profile = require("tillervim.profile")
     opts.providers = {}
     local groups = {}
@@ -51,7 +51,7 @@ return {
       local group = groups[name]
       if parts[id] then
         group[parts[id]] = codex[parts[id]]
-        if id ~= "openai" then group.cli_api_key = codex.cli_api_key end
+        group.cli_api_key = codex.cli_api_key
       elseif id == name then
         group.tui = { kind = name }
       else
@@ -62,7 +62,7 @@ return {
     opts.review = vim.tbl_deep_extend("force", vim.deepcopy(require("tillervim.config.review")), {
       max_file_size = git.max_file_size, history_limit = git.history_limit, retention = { saved = git.retention.saved },
     })
-    opts.integrations = { companion = profile.companion, review = true }
+    opts.integrations = { review = true }
     opts.callbacks = {
       project_root = require("tillervim.util.cwd").project_root,
       editor_win = function() return require("editor_core.window").editor_win() end,
@@ -72,6 +72,14 @@ return {
     return opts
   end,
   config = function(_, opts)
+    opts.integrations = opts.integrations or {}
+    if opts.integrations.companion == nil then
+      opts.integrations.companion = require("tillervim.profile").companion
+        or vim.iter(opts.providers or {}):any(function(entry) return entry.acp ~= nil or entry.api ~= nil end)
+    end
+    if opts.integrations.companion and not require("tillervim.profile").companion and vim.fn.maparg("<leader>ao", "n") == "" then
+      vim.keymap.set("n", "<leader>ao", "<cmd>CodeCompanionHistory<cr>", { desc = "Browse saved Companion chats" })
+    end
     require("agent_workbench").setup(opts)
     require("editor_core.terminal").set_agent_test(require("agent_workbench.terminal").is_agent_buf)
     vim.api.nvim_create_autocmd("User", {

@@ -467,19 +467,22 @@ t.ok(#missing > 0, "some agent CLI or bridge is missing on that PATH, to check a
 for _, exe in ipairs(missing) do
   t.eq(level_of(backends, exe .. " not found"), "warn", exe .. " missing: a warning, whichever provider offers it")
 end
--- Nothing at all: no CLI, no bridge and no NVIM_* key.
-local saved_keys = {}
-for _, name in ipairs(ai.key_names()) do
-  local var = ai.key_profiles[name].api_key
-  saved_keys[var] = vim.env[var]
-  vim.env[var] = nil
-end
+-- Nothing at all: no CLI, no bridge and no configured HTTP API key.
+local original_providers = vim.deepcopy(ai.providers)
 local none = section(run(cut, "with nothing available"), "config: AI backends")
 t.eq(level_of(none, "No AI backend is available"), "error", "nothing to start a chat with is an error")
-vim.env[ai.key_profiles[ai.key_names()[1]].api_key] = "spec"
+local with_http = vim.deepcopy(original_providers)
+with_http[#with_http + 1] = { name = "spec_http", label = "Spec HTTP", api = { adapter = "openai", api_key = "$SPEC_HEALTH_KEY" } }
+ai._set_providers(with_http)
+vim.env.SPEC_HEALTH_KEY = nil
+local unset_http = section(run(cut, "with unset $VAR"), "config: AI backends")
+t.eq(level_of(unset_http, "$SPEC_HEALTH_KEY not set"), "warn", "unset active $VAR is reported as warning")
+t.eq(level_of(unset_http, "No AI backend is available"), "error", "unset $VAR alone cannot start a chat")
+vim.env.SPEC_HEALTH_KEY = "spec"
 local one_key = section(run(cut, "with one API key"), "config: AI backends")
-t.eq(find(one_key, "No AI backend is available"), nil, "one API key is enough to start a chat")
-for var, value in pairs(saved_keys) do vim.env[var] = value end
+t.eq(find(one_key, "No AI backend is available"), nil, "one configured API key is enough to start a chat")
+vim.env.SPEC_HEALTH_KEY = nil
+ai._set_providers(original_providers)
 local g_before = vim.g.ai_review
 vim.g.ai_review = { sources = { codecompanion_acp = false, codecompanion_http = false } }
 local hooks_off = section(run(nil, "with the chat sources off"), "config: review hooks")

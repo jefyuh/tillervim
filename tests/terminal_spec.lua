@@ -190,6 +190,73 @@ vim.api.nvim_feedkeys(vim.keycode("<C-,>"), "tx", false)
 t.eq(vim.api.nvim_get_current_win(), left, "Ctrl-comma reaches the editor from terminal-Normal")
 vim.api.nvim_feedkeys(vim.keycode("<C-,>"), "tx", false)
 t.eq(vim.api.nvim_get_current_win(), docked, "Ctrl-comma toggles back to the terminal")
+
+-- Terminal scrolling stops at the bottom terminal row instead of scrolling
+-- topline past line('$') - height + 1 into empty EndOfBuffer space.
+do
+  t.eq(vim.o.eventignore, "", "eventignore is clean before opening terminal scroll fixture")
+  local dbuf = vim.api.nvim_win_get_buf(docked)
+  t.eq(vim.b[dbuf].snacks_scroll, false, "TermOpen disables Snacks smooth scroll on :terminal")
+
+  vim.api.nvim_set_current_win(left)
+  vim.cmd("belowright 10split")
+  local scroll_win = vim.api.nvim_get_current_win()
+  vim.cmd.enew()
+  local job = vim.fn.jobstart({
+    "sh", "-c", "i=1; while [ $i -le 25 ]; do printf 'row %02d\\n' $i; i=$((i+1)); done; sleep 30",
+  }, { term = true })
+  local sbuf = vim.api.nvim_get_current_buf()
+  t.eq(vim.b[sbuf].snacks_scroll, false, "Snacks smooth scroll is off on terminal buffers")
+  t.ok(vim.wait(1000, function()
+    return vim.api.nvim_buf_line_count(sbuf) >= 25
+      and vim.api.nvim_buf_get_lines(sbuf, 24, 25, false)[1] == "row 25"
+  end), "scroll fixture rendered 25 terminal rows")
+  local cnt = vim.api.nvim_buf_line_count(sbuf)
+  local h = vim.api.nvim_win_get_height(scroll_win)
+  local max_top = math.max(1, cnt - h + 1)
+
+  vim.api.nvim_set_current_win(scroll_win)
+  vim.api.nvim_win_set_cursor(scroll_win, { 1, 0 })
+  vim.cmd("normal! zt")
+  t.eq(vim.fn.winsaveview().topline, 1, "scrolled up to top of terminal history")
+
+  for _, key in ipairs({ "50<C-e>", "<C-d><C-d><C-d><C-d><C-d>", "50<C-d>", "5<PageDown>", "5<C-f>" }) do
+    vim.api.nvim_win_set_cursor(scroll_win, { 5, 0 })
+    vim.fn.winrestview({ topline = 5, lnum = 5, col = 0 })
+    vim.wo[scroll_win].scroll = 0
+    vim.api.nvim_feedkeys(vim.keycode(key), "mx", false)
+    t.eq(vim.fn.winsaveview().topline, max_top, key .. " clamps at the bottom terminal row")
+  end
+
+  local function wheel_down(win)
+    vim.cmd.redraw()
+    local pos = vim.api.nvim_win_get_position(win)
+    vim.api.nvim_input_mouse("wheel", "down", "", 0, pos[1] + 1, pos[2] + 1)
+    vim.api.nvim_feedkeys(vim.fn.getcharstr(), "mx", false)
+    vim.cmd.redraw()
+  end
+
+  vim.api.nvim_win_set_cursor(scroll_win, { 5, 0 })
+  vim.fn.winrestview({ topline = 5, lnum = 5, col = 0 })
+  for _ = 1, 10 do wheel_down(scroll_win) end
+  t.eq(vim.fn.winsaveview().topline, max_top, "focused <ScrollWheelDown> clamps at the bottom terminal row")
+
+  -- Hovering an unfocused terminal from an editor split keeps ordinary buffers
+  -- free of global wheel overrides; WinScrolled clamps the terminal viewport
+  -- before redraw (WinScrolled itself fires from the main loop, like WinResized).
+  vim.api.nvim_set_current_win(left)
+  t.eq(vim.fn.maparg("<ScrollWheelDown>", "n", false, true), {},
+    "ordinary buffers keep the builtin <ScrollWheelDown> with no global override")
+  vim.api.nvim_win_call(scroll_win, function()
+    vim.fn.winrestview({ topline = cnt, lnum = cnt, col = 0 })
+  end)
+  term.clamp_scroll(scroll_win)
+  t.eq(vim.api.nvim_win_call(scroll_win, function() return vim.fn.winsaveview().topline end), max_top,
+    "clamp_scroll restores an overshot unfocused terminal to the bottom row")
+  t.eq(vim.api.nvim_get_current_win(), left, "clamping an unfocused terminal preserves editor focus")
+  vim.fn.jobstop(job)
+end
+
 vim.cmd("only!")
 
 t.done()

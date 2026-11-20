@@ -63,15 +63,18 @@ autocmd({ "TabClosed", "SessionLoadPost" }, {
 })
 
 -- Optimize terminal buffer settings for TUI apps (for example coding agents)
--- Disables line numbers and scrolloff to prevent rendering glitches
+-- Disables line numbers and scrolloff to prevent rendering glitches, and
+-- clamps downward scrolling at the bottom of the terminal screen.
+local term_group = augroup("terminal_ui_fix", { clear = true })
 autocmd("TermOpen", {
-  group = augroup("terminal_ui_fix", { clear = true }),
+  group = term_group,
   callback = function(event)
     vim.opt_local.number = false
     vim.opt_local.relativenumber = false
     vim.opt_local.scrolloff = 0
     vim.opt_local.sidescrolloff = 0
     vim.opt_local.signcolumn = "no"
+    require("editor_core.terminal").attach_scroll_clamp(event.buf)
 
     -- Terminal-only actions join the comma menu. Plain keys also survive
     -- outer tmux sessions where Ctrl-digit encodings are lost. Leave terminal
@@ -82,6 +85,18 @@ autocmd("TermOpen", {
       end, { buffer = event.buf, desc = "Terminal " .. n })
     end
   end,
+})
+
+autocmd("WinScrolled", {
+  group = term_group,
+  callback = function()
+    local term = require("editor_core.terminal")
+    for win_str in pairs(vim.v.event) do
+      local win = tonumber(win_str)
+      if win then term.clamp_scroll(win) end
+    end
+  end,
+  desc = "Clamp terminal windows so scrolling stops at the bottom row",
 })
 
 -- Highlight on yank (brief flash after copying)

@@ -982,19 +982,19 @@ focus it and type nothing, protecting drafts and approvals. `at`/`aT` read
 Codex JSONL transcripts independently of terminal scrollback.
 
 Select transports in personal `tillervim.json`. For custom providers, HTTP profiles, panel width, native argv or plugin paths, set `agent-workbench.nvim` options in personal `lua/plugins/`. `terminal.provider` may be `native`,
-`snacks` or a custom embedded adapter. tmux frame composition is independent;
-`CODEX_WRAP_TMUX=0` disables it. Its runner/watchdog/teardown preserve startup
+`snacks` or a custom embedded adapter. tmux frame composition is independent (`opts.native.codex.wrap_tmux = false` disables it). Its runner/watchdog/teardown preserve startup
 errors, CJK and scrollback and clean owned descendants. No CLI config is written.
 
 `<Space>ae` uses HTTP API credits; `<Space>ax` / `:AI key` switches that profile
-for this process, without touching terminals or existing chats. Defaults use
-OpenAI's `NVIM_OPENAI_API_KEY`; a CLI's `OPENAI_API_KEY` can change its billing
+for this process, without touching terminals or existing chats. Declare HTTP API
+providers explicitly in personal `opts.providers` (`api_key` accepts `"$VAR"`, a
+literal secret, or `function() -> string|nil`); a CLI's `OPENAI_API_KEY` can change its billing
 and produces a warning. Codex ACP uses `chat-gpt` authentication. No key is silently
 borrowed from a CLI variable. More detail: [AI keys](../README.md#everyday-keys).
 
 ### Local native plugins
 
-Set `opts.plugin_dirs` on the personal `agent-workbench.nvim` spec, or override with `NVIM_AI_PLUGIN_DIR`.
+Set `opts.plugin_dirs` on the personal `agent-workbench.nvim` spec.
 Entries can be plugin directories or distribution roots with `codex/<plugin>`
 packages. Resolution happens at native Codex launch; nothing installs at startup or
 for CodeCompanion. Codex refreshes local snapshots through `plugin add` using
@@ -1009,9 +1009,9 @@ enabled overrides are invocation-local; global enablement/config stay intact.
 | Antigravity, Kimi Code, OpenCode terminals | Embedded CLI / CLI account | Interactive sessions, file references and draft text |
 | Other ACP chats | CodeCompanion / provider account | Chat and integrated review with the chosen agent |
 | Codex ACP chat | CodeCompanion + `codex-acp` / ChatGPT login | Chat UI with CLI tools |
-| OpenAI API chat / inline | HTTP / API credits | Chat or `<Space>ae` inline edits |
+| HTTP API chat / inline | HTTP / API credits | Chat or `<Space>ae` inline edits (declared in personal `opts.providers`) |
 
-The picker shows each distinction and availability. HTTP keys use `NVIM_*`.
+The picker shows each distinction and availability. HTTP keys resolve from each profile's `api_key`.
 CodeCompanion chat adapters are fixed at creation. Local transcript history and
 resuming an agent's ACP session with `/resume` are separate things.
 

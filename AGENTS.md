@@ -106,9 +106,10 @@ Keep install, usage, configuration and troubleshooting instructions in the repos
   entry has unique name, label, optional cli_api_key, and one or more parts:
   `tui={kind="codex"|"antigravity"|"kimi"|"opencode"}`, `acp={adapter,command,auth_method?}`, or
   `api={adapter,api_key,name?,label?,model?}`. Omitted parts are not offered.
-  The shipped Codex entry offers native terminal, codex-acp with chat-gpt auth,
-  and OpenAI HTTP with NVIM_OPENAI_API_KEY. A second HTTP key is another
-  API-only provider. New native kinds need code and fixtures, not just tillervim.config.
+  The shipped Codex entry offers native terminal and codex-acp with chat-gpt auth;
+  HTTP API providers are declared explicitly in personal `agent-workbench.nvim` `opts.providers`,
+  with `api_key` as `"$VAR"`, a literal secret string, or `function() -> string|nil`.
+  New native kinds need code and fixtures, not just tillervim.config.
 - Native options declare executable, argv and tmux preference. Keep the
   existing `--no-alt-screen --yolo` policy unless the user changes it.
   `terminal.provider` selects native (built in), Snacks (optional), or a custom
@@ -117,7 +118,7 @@ Keep install, usage, configuration and troubleshooting instructions in the repos
 - Setup copies user data once; dictionaries partially override, ordered lists
   replace (including empty argv), false disables optional integrations.
   `options()` is a copy; session state and HTTP key switches are separate live
-  state. Env CODEX_WRAP_TMUX > vim.g.codex_wrap_tmux > setup preference.
+  state.
 - Session identity/generation belongs to terminal_provider and
   vim.b[buf].agent_workbench, never a Snacks object or command-name inference.
   Providers implement open/show/hide/send/alive/stop and report buffers before
@@ -158,23 +159,22 @@ Keep install, usage, configuration and troubleshooting instructions in the repos
   CodeCompanion inline/cmd adapters only; never restart/move chats or terminals.
   ar/am keep their existing ellipsis descriptions; aR remains a leaf action.
   No ag/aG/ah/aH/ap mappings: new chat is an, palette remains a lazy command.
-- A nonempty NVIM_AI_KEY_PROFILE > vim.g.ai_key_profile > opts.key_profile
-  selects the startup HTTP profile. auto resolves the first API with a key,
-  else the first API, at startup and each explicit auto selection. With no
+- `opts.key_profile` selects the startup HTTP profile (`auto` resolves the first
+  configured API key, else the first API, at startup and each explicit `auto`
+  selection; function resolvers stay lazy until preflight or request). With no
   API, inline/cmd refuses with a notice. Nothing persists or writes vim.env.
-  NVIM_AI_PROVIDER/vim.g.ai_provider are obsolete and warn once, not select a
-  default backend. AI provider explains removal and points to AI new.
+  AI provider explains removal and points to AI new.
 - CodeCompanion is optional chat/inline integration, not a native facade. The
   picker shows native, then ACP, then HTTP in provider order, with availability
   and billing. API key/missing ACP bridge preflights run before creation. A
   chat's adapter is fixed. Its own unnamed chats use first ACP else first API;
   key switching changes interactions.inline/cmd only, not chat or
   vim.g.codecompanion_adapter. API/ACP busy/tool-loop delivery checks remain.
-- HTTP adapters read NVIM_* variables, never CLI billing variables. Always
-  extend builtin Anthropic/OpenAI adapters with their NVIM_* keys, even if
-  absent from providers, so restored history cannot bill CLI keys. Always set
-  builtin codex ACP auth_method=chat-gpt; its default api-key bills OPENAI_API_KEY.
-  A configured cli_api_key is warned about while set. Never write billing env.
+- HTTP adapters resolve configured `api_key` (`"$VAR"`, literal or `function`),
+  never CLI billing variables. Builtin Anthropic/OpenAI adapters default to an
+  empty resolver unless configured in `providers`, so restored history cannot bill
+  CLI keys. Always set builtin codex ACP auth_method=chat-gpt; its default api-key
+  bills OPENAI_API_KEY. A configured cli_api_key is warned about while set. Never write billing env.
 - codecompanion-history transcript persistence and continuing an ACP session
   through /resume are distinct. Its separate code_review stays disabled,
   code_review context is not offered, and CodeCompanionCodeReview is deleted
@@ -185,7 +185,7 @@ Keep install, usage, configuration and troubleshooting instructions in the repos
   stays off so client-detached can record/sweep the pane's process tree.
   agent-run preserves nonzero diagnostics because tmux teardown exits 0.
   agent-teardown SIGTERMs/SIGKILLs owned survivors, honoring
-  NVIM_AGENT_TEARDOWN_IGNORE for shared daemons; bare kill-server is insufficient.
+  `opts.native.codex.teardown_ignore` (`--ignore`) for shared daemons; bare kill-server is insufficient.
 - ai and TUI ctrl+g use the bundled agent-editor via EDITOR/VISUAL/NVIM, set at
   terminal creation and explicitly forwarded by tmux new-session -e. Missing
   values silently start a nested Nvim. An unowned git-commit prompt takes no
@@ -259,7 +259,7 @@ Keep install, usage, configuration and troubleshooting instructions in the repos
 
 ## Agent Hooks
 
-- Local native plugins use opts.plugin_dirs or NVIM_AI_PLUGIN_DIR. Codex gets
+- Local native plugins use `opts.plugin_dirs`. Codex gets
   invocation-local marketplace/enabled overrides, after plugin add refreshes
   local snapshots in a disposable CODEX_HOME sharing only the real plugin
   cache. Never change user config/global enablement or bypass native hook

@@ -6,7 +6,9 @@ and the keybinding guide. Requiring the module is inert. A high-priority
 
 Options: `options` (public Vim option overrides), `theme` (UI options/glyphs),
 `formatting` (autoformat), `behaviors` (optional input-method/cursor/yank/autoread
-behavior), `keymaps` (boolean, defaults to true), and
+behavior), `input_method` (`{ source?: string, wait_time_ms?: integer }` for macOS
+layout override and `macism` wait tuning), `log_level` (`"DEBUG"|"INFO"|"WARN"|"ERROR"`),
+`keymaps` (boolean, defaults to true), and
 `url.buffer_dir` (optional host directory callback). `keymaps = false` installs
 no mappings. Configure individual mappings with ordinary `vim.keymap.set/del`
 after setup. Callable feature APIs remain available without the default keys.

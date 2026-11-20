@@ -28,7 +28,7 @@ Native terminals support Codex, Antigravity, Kimi Code and OpenCode. Each termin
 
 Provide Neovim **0.12.5+**, Git and ripgrep. Syncing Treesitter parsers requires a C compiler and tree-sitter CLI **0.26.1+**. A Nerd Font renders icons. Provide project SDKs for the languages you enable.
 
-Each selected AI transport has its own prerequisites. The native Codex terminal uses `codex` with optional tmux rendering. Codex ACP uses the separate `codex-acp` executable. OpenAI HTTP reads `NVIM_OPENAI_API_KEY`. See the [setup guide](docs/SETUP.md) for the other executables and sign-in methods.
+Each selected AI transport has its own prerequisites. The native Codex terminal uses `codex` with optional tmux rendering. Codex ACP uses the separate `codex-acp` executable. Optional HTTP API providers are declared explicitly in personal `agent-workbench.nvim` `opts.providers`. See the [setup guide](docs/SETUP.md) for the other executables and sign-in methods.
 
 ## Install
 
@@ -167,7 +167,7 @@ Do not edit the installed distribution's private `tillervim.config.*` modules.
 
 Native Codex uses `--no-alt-screen --yolo` by default; customize
 `opts.native.codex.args` on `agent-workbench.nvim` to change its launch policy.
-HTTP adapters use `NVIM_*` key variables. Codex ACP uses ChatGPT authentication.
+HTTP adapters resolve explicit `api_key` values (`"$VAR"`, literal or `function`). Codex ACP uses ChatGPT authentication.
 Nothing writes billing credentials into the environment.
 
 The [manual](docs/MANUAL.md) explains full editing, debugging and review workflows.

@@ -11,8 +11,7 @@ local t = dofile("tests/helper.lua")
 local hook = require("agent_workbench.review.hook")
 local ai_config = require("agent_workbench.state")
 local codex = require("agent_workbench.backend.codex")
-local saved_plugin_dirs = vim.env.NVIM_AI_PLUGIN_DIR
-vim.env.NVIM_AI_PLUGIN_DIR = nil
+local restore_plugins = require("agent_workbench.options")._patch({ plugin_dirs = {} })
 
 local script = hook.script()
 local scratch = vim.fn.tempname()
@@ -179,17 +178,19 @@ local tmux = vim.fn.executable("tmux") == 1
 -- Codex: the list goes to jobstart without a shell, and under tmux as a
 -- multi-argument pane command.
 local codex_want = { "--no-alt-screen", "--yolo", "-c", override, "resume", "--last" }
-for _, wrap in ipairs(tmux and { "0", "1" } or { "0" }) do
-  local cmd = with_env({ CODEX_WRAP_TMUX = wrap, TERM = "xterm-256color" }, function()
+for _, wrap in ipairs(tmux and { false, true } or { false }) do
+  local restore_wrap = require("agent_workbench.options")._patch({ native = { codex = { wrap_tmux = wrap } } })
+  local cmd = with_env({ TERM = "xterm-256color" }, function()
     local argv = codex._codex_command({ "resume", "--last" })
     argv[1] = bin .. "/codex" -- an absolute stand-in survives shell startup PATH changes
     return codex._terminal_command(argv)
   end)
-  local path = wrap == "1" and "tmux" or "direct"
+  restore_wrap()
+  local path = wrap and "tmux" or "direct"
   t.eq(ai_config.agent_of_command(cmd), "codex", "Codex (" .. path .. "): agent_of_command still finds the agent")
-  local argv, env = launch("codex", cmd, wrap == "1" and "codex-nvim-" .. vim.fn.getpid() or nil)
+  local argv, env = launch("codex", cmd, wrap and "codex-nvim-" .. vim.fn.getpid() or nil)
   t.eq(argv, codex_want, "Codex (" .. path .. "): the TOML override arrives byte for byte, resume after it")
-  if wrap == "1" then
+  if wrap then
     t.eq(env, { EDITOR = wrapper, VISUAL = wrapper, NVIM = vim.v.servername },
       "Codex (tmux): EDITOR, VISUAL and NVIM still reach the agent")
   end
@@ -434,6 +435,6 @@ if vim.fn.executable("codex") == 1 then
     .. (odd_ok and "" or (": " .. tostring(odd))))
 end
 
-vim.env.NVIM_AI_PLUGIN_DIR = saved_plugin_dirs
+restore_plugins()
 vim.fn.delete(scratch, "rf")
 t.done()

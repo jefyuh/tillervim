@@ -1,9 +1,8 @@
--- Codex-only host choices, ordered transport/profile fixtures and live HTTP switching.
--- No agent, ACP connection or HTTP request is started.
+-- Codex-only default host choices, ordered transport/profile fixtures and live HTTP switching.
+-- Exercises $VAR, literal and lazy function api_key sources without starting an agent or request.
 local t = dofile("tests/helper.lua")
 local state = require("agent_workbench.state")
 local agent = require("agent_workbench")
-local switch = require("agent_workbench.switch")
 local original = vim.deepcopy(state.providers)
 local original_key = state.key_setting()
 local settings = assert(loadfile("lua/tillervim/config/ai.lua"))
@@ -11,6 +10,7 @@ setfenv(settings, {})
 t.eq(settings(), require("tillervim.config.ai"), "editable AI declarations are plain data")
 t.eq(state.providers, require("tillervim.config.ai").providers, "runtime resolved the declared provider list")
 t.eq(state.agent_names(), { "codex" }, "only Codex is an implemented/enabled native backend")
+t.eq(state.key_names(), {}, "distribution ships no implicit HTTP API profile")
 t.eq(vim.fn.exists(":ClaudeCode"), 0, "no Claude command is offered")
 t.eq(vim.fn.maparg("<leader>aa", "n"), "", "no Claude proposal accept key")
 t.eq(vim.fn.maparg("<leader>ad", "n"), "", "no Claude proposal reject key")
@@ -18,34 +18,40 @@ local notes, events = {}, {}
 local notify = vim.notify
 vim.notify = function(message, level) notes[#notes + 1] = { message = tostring(message), level = level } end
 vim.api.nvim_create_autocmd("User", { pattern = "AIStateChanged", callback = function(ev) events[#events + 1] = ev.data end })
+local fn_calls = 0
+local fn_value = "fn-secret-value"
 local fixture = {
   { name = "codex", label = "Codex", cli_api_key = "OPENAI_API_KEY", tui = { kind = "codex" },
     acp = { adapter = "codex", command = "codex-acp", auth_method = "chat-gpt" },
-    api = { adapter = "openai", label = "OpenAI", api_key = "NVIM_OPENAI_API_KEY" } },
-  { name = "work", label = "Work", api = { adapter = "openai", name = "work", label = "Work OpenAI", api_key = "NVIM_WORK_OPENAI_KEY" } },
-  { name = "anthropic", label = "Anthropic", api = { adapter = "anthropic", api_key = "NVIM_ANTHROPIC_API_KEY" } },
+    api = { adapter = "openai", label = "OpenAI", api_key = "$SPEC_OPENAI_KEY" } },
+  { name = "work", label = "Work", api = { adapter = "openai", name = "work", label = "Work OpenAI", api_key = "${SPEC_WORK_OPENAI_KEY}" } },
+  { name = "anthropic", label = "Anthropic", api = { adapter = "anthropic", api_key = "sk-literal-secret-never-print" } },
+  { name = "keychain", label = "Keychain", api = { adapter = "anthropic", name = "keychain", label = "Keychain Claude",
+    api_key = function() fn_calls = fn_calls + 1; return fn_value end } },
 }
-local vars = { "NVIM_OPENAI_API_KEY", "NVIM_WORK_OPENAI_KEY", "NVIM_ANTHROPIC_API_KEY" }
+local vars = { "SPEC_OPENAI_KEY", "SPEC_WORK_OPENAI_KEY" }
 local saved = {}
 for _, name in ipairs(vars) do saved[name] = vim.env[name] or false; vim.env[name] = nil end
 local function ids() return vim.tbl_map(function(backend) return backend.id end, state.backends()) end
 state._set_providers(fixture)
-t.eq(ids(), { "codex", "acp:codex", "api:openai", "api:work", "api:anthropic" }, "transports group first, provider order applies within each group")
-t.eq(state.key_names(), { "openai", "work", "anthropic" }, "each API profile has its own stable adapter identity")
+t.eq(ids(), { "codex", "acp:codex", "api:openai", "api:work", "api:anthropic", "api:keychain" },
+  "transports group first, provider order applies within each group")
+t.eq(state.key_names(), { "openai", "work", "anthropic", "keychain" }, "each API profile has its own stable adapter identity")
 t.eq(state.codecompanion.chat_adapter, "codex", "unqualified Companion chats use the first ACP adapter")
 t.ok(state.default == nil and state.provider == nil and state.use_provider == nil, "there is no implicit default backend")
-t.eq(state.auto_key(), "openai", "auto without exported keys selects first API profile")
-vim.env.NVIM_WORK_OPENAI_KEY = "offline-test-only"
-t.eq(state.auto_key(), "work", "auto selects the first exported key")
-vim.env.NVIM_OPENAI_API_KEY = "offline-test-only"
-t.eq(state.auto_key(), "openai", "provider order breaks ties between exported keys")
-state._set_providers({ fixture[2], fixture[1], fixture[3] })
-t.eq(ids(), { "codex", "acp:codex", "api:work", "api:openai", "api:anthropic" }, "reordering profiles does not change transport grouping")
+t.eq(state.auto_key(), "anthropic", "auto skips unset $VAR profiles and selects first configured key")
+vim.env.SPEC_WORK_OPENAI_KEY = "offline-test-only"
+t.eq(state.auto_key(), "work", "auto selects the first configured $VAR in provider order")
+vim.env.SPEC_OPENAI_KEY = "offline-test-only"
+t.eq(state.auto_key(), "openai", "provider order breaks ties between configured keys")
+state._set_providers({ fixture[2], fixture[1], fixture[3], fixture[4] })
+t.eq(ids(), { "codex", "acp:codex", "api:work", "api:openai", "api:anthropic", "api:keychain" },
+  "reordering profiles does not change transport grouping")
 t.eq(state.auto_key(), "work", "provider order also changes auto's preference")
 state._set_providers(fixture)
 vim.api.nvim_exec_autocmds("User", { pattern = "AIStateChanged", modeline = false })
 t.eq(vim.fn.getcompletion("AI ", "cmdline"), { "new", "key", "info" }, "AI command exposes its subcommands")
-t.eq(vim.fn.getcompletion("AI key ", "cmdline"), { "auto", "openai", "work", "anthropic" }, "key completion follows configured profiles")
+t.eq(vim.fn.getcompletion("AI key ", "cmdline"), { "auto", "openai", "work", "anthropic", "keychain" }, "key completion follows configured profiles")
 t.eq(vim.fn.getcompletion("AI key w", "cmdline"), { "work" }, "key completion filters typed prefix")
 t.eq(vim.fn.getcompletion("AI key work ", "cmdline"), {}, "no arguments follow a profile name")
 t.eq(vim.fn.exists(":AIInfo"), 2, "documented AIInfo entry remains available")
@@ -64,10 +70,10 @@ t.eq(#events, count, "unknown key emits no state change")
 t.eq(notes[#notes].level, vim.log.levels.ERROR, "unknown key reports one actionable error")
 vim.cmd("AI key work")
 t.eq(#events, count, "selecting the same pinned profile is a no-op")
-vim.env.NVIM_OPENAI_API_KEY = nil
+vim.env.SPEC_OPENAI_KEY = nil
 vim.cmd("AI key auto")
 t.eq({ state.key.name, state.key.auto }, { "work", true }, "auto re-resolves current environment")
-vim.env.NVIM_OPENAI_API_KEY = "offline-test-only"
+vim.env.SPEC_OPENAI_KEY = "offline-test-only"
 vim.cmd("AI key auto")
 t.eq(state.key.name, "openai", "selecting auto again sees newly exported keys")
 local choose = vim.ui.select
@@ -84,8 +90,18 @@ for _, command in ipairs({ "AI provider", "AI provider codex" }) do
 end
 vim.cmd("AI info")
 local info = notes[#notes].message
-t.ok(info:find("Codex", 1, true) and info:find("NVIM_WORK_OPENAI_KEY", 1, true), "info lists configured providers and variable names")
-t.ok(not info:find("offline-test-only", 1, true), "info never prints key values")
+t.ok(info:find("Codex", 1, true) and info:find("$SPEC_WORK_OPENAI_KEY", 1, true), "info lists configured providers and $VAR names")
+t.ok(info:find("literal", 1, true) and info:find("on demand", 1, true), "info describes literal and function key sources")
+t.ok(not info:find("offline-test-only", 1, true) and not info:find("sk-literal-secret-never-print", 1, true)
+  and not info:find("fn-secret-value", 1, true), "info never prints secret key values")
+t.eq(fn_calls, 0, "build, auto_key, backends and :AI info never invoke function resolvers")
+vim.cmd("AI key keychain")
+t.eq(fn_calls, 0, "switching to a function-backed profile still keeps the resolver lazy")
+t.eq(require("agent_workbench.companion").preflight("http"), true, "preflight evaluates the function resolver on demand")
+t.eq(fn_calls, 1, "preflight invoked the function resolver once")
+fn_value = ""
+t.eq(require("agent_workbench.companion").preflight("http"), false, "preflight refuses when the function returns empty")
+fn_value = "fn-secret-value"
 t.ok(info:find("codex (ACP)", 1, true), "info names the unqualified chat adapter and transport")
 local function refused(list, text, label)
   local ok, err = pcall(state.build, list)
@@ -97,11 +113,14 @@ local duplicate = vim.deepcopy(fixture[1]); duplicate.name = "other"
 refused({ fixture[1], duplicate }, 'tui kind "codex" is already offered', "duplicate native kind")
 refused({ { name = "bad", label = "Bad", tui = { kind = "claude" } } }, "tui.kind", "unimplemented Claude backend")
 refused({ { name = "bad", label = "Bad", acp = { adapter = "codex" } } }, "acp needs", "ACP needs an executable")
-refused({ { name = "bad", label = "Bad", api = { adapter = "openai", api_key = "OPENAI_API_KEY" } } }, "NVIM_", "API profile cannot consume CLI billing variable")
-refused({ fixture[1], { name = "dup", label = "Duplicate", api = { adapter = "openai", api_key = "NVIM_OTHER" } } }, "used twice", "duplicate API adapter needs a distinct profile name")
+refused({ { name = "bad", label = "Bad", api = { adapter = "openai", api_key = "$OPENAI_API_KEY" } } }, "CLI billing", "$OPENAI_API_KEY is refused")
+refused({ { name = "bad", label = "Bad", api = { adapter = "openai", api_key = "OPENAI_API_KEY" } } }, "CLI billing", "bare OPENAI_API_KEY is refused")
+refused({ { name = "bad", label = "Bad", api = { adapter = "openai", api_key = "$" } } }, "invalid environment variable", "malformed $VAR is refused")
+refused({ { name = "bad", label = "Bad", api = { adapter = "openai", api_key = "   " } } }, "api_key must be", "blank api_key is refused")
+refused({ fixture[1], { name = "dup", label = "Duplicate", api = { adapter = "openai", api_key = "$SPEC_OTHER" } } }, "used twice", "duplicate API adapter needs a distinct profile name")
 local unknown = vim.deepcopy(fixture[1]); unknown.typo = true
 refused({ unknown }, '"codex".typo', "unknown provider fields identify the provider")
-unknown = vim.deepcopy(fixture[1]); unknown.api.key = "NVIM_UNUSED"
+unknown = vim.deepcopy(fixture[1]); unknown.api.key = "$SPEC_UNUSED"
 refused({ unknown }, '"codex".api.key', "unknown nested API settings do not silently disappear")
 unknown = vim.deepcopy(fixture[1]); unknown.acp.auth_method = false
 refused({ unknown }, '"codex".acp.auth_method', "optional ACP fields are typed")

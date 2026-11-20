@@ -125,7 +125,6 @@ for _, id in ipairs(profile.ai) do
   local bridge = catalog.bridges[(id:gsub("%-acp$", ""))]
   local exe = products[id] or (bridge and bridge.command)
   if exe then say(id .. ": " .. (has(exe) and vim.fn.exepath(exe) or "CLI missing, skipped")) end
-  if id == "openai" then say("NVIM_OPENAI_API_KEY: " .. ((vim.env.NVIM_OPENAI_API_KEY or "") ~= "" and "present (unverified)" or "missing")) end
 end
 if (vim.tbl_contains(profile.ai, "codex") or vim.tbl_contains(profile.ai, "codex-acp")) and has("codex") then
   local status = vim.system({ "codex", "login", "status" }):wait(5000)

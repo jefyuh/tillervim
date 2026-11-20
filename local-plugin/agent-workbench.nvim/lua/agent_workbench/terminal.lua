@@ -28,18 +28,40 @@ function M.is_agent_buf(buf)
   return M.agent_of(buf) ~= nil
 end
 
+---@param buf integer
+---@return string
+local function command_text(buf)
+  local info = vim.b[buf].agent_workbench
+  local cmd = info and info.cmd
+  if type(cmd) == "table" then return table.concat(vim.tbl_map(tostring, cmd), " ") end
+  return type(cmd) == "string" and cmd or ""
+end
+
 ---Whether this panel's command goes through a tmux wrapper.
 ---
----The wrapper is the only thing in the pane that turns mouse reporting on
----(`set-option -g mouse on` in both backends), and that single fact decides
----who handles a click -- so the recorded command is the honest test.
+---The wrapper turns mouse reporting on (`set-option -g mouse on`), and owns
+---scrollback through copy-mode.
 ---@param buf integer
 ---@return boolean
 local function wrapped_in_tmux(buf)
-  local info = vim.b[buf].agent_workbench
-  local cmd = info and info.cmd
-  if type(cmd) == "table" then cmd = table.concat(vim.tbl_map(tostring, cmd), " ") end
-  return type(cmd) == "string" and cmd:find("tmux", 1, true) ~= nil
+  return command_text(buf):find("tmux", 1, true) ~= nil
+end
+
+---Whether an unwrapped agent TUI enables terminal mouse reporting itself.
+---
+---Alternate-screen TUIs (Antigravity's altScreenMode, OpenCode) enable mouse
+---tracking (?1002h/?1006h), so Nvim forwards clicks, drags and wheel events to
+---the child while keeping Terminal-mode active on its own. Swallowing clicks
+---there would block click-to-expand and mouse selection inside the TUI.
+---@param buf integer
+---@return boolean
+local function owns_mouse(buf)
+  local kind = M.agent_of(buf)
+  if kind == "opencode" then return true end
+  if kind == "antigravity" then
+    return command_text(buf):find('"altScreenMode"%s*:%s*true') ~= nil
+  end
+  return false
 end
 
 ---@param buf integer
@@ -107,6 +129,21 @@ local function keep_terminal_mode_on_click(buf)
       desc = "Stay in Terminal-mode on click inside agent panel",
     })
   end
+  -- Terminal-mode on an unwrapped non-mouse panel is already pinned to the
+  -- live bottom. Swallowing downward wheel ticks inside the panel prevents an
+  -- accidental downward scroll from dropping into Normal mode, while hovering
+  -- another window still scrolls that window without leaving Terminal-mode.
+  vim.keymap.set("t", "<ScrollWheelDown>", function()
+    if vim.fn.getmousepos().winid == vim.api.nvim_get_current_win() then return "" end
+    return "<ScrollWheelDown>"
+  end, {
+    buffer = buf,
+    expr = true,
+    nowait = true,
+    noremap = true,
+    silent = true,
+    desc = "Stay in Terminal-mode on wheel down at bottom of agent panel",
+  })
 end
 
 -- Claude and Codex both use a quick double Esc for their own "go back to the
@@ -175,7 +212,7 @@ function M.attach(buf)
   pass_esc_to_agent(buf)
   if wrapped_in_tmux(buf) then
     forward_scrollback(buf)
-  else
+  elseif not owns_mouse(buf) then
     keep_terminal_mode_on_click(buf)
   end
 end

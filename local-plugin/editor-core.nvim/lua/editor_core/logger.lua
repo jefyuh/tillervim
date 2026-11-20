@@ -19,9 +19,10 @@ local levels = {
   WARN = 3,
   ERROR = 4,
 }
+M.LEVELS = levels
 
--- Default log level
-local current_level = levels.INFO
+-- Default log level (overridden via editor_core.setup opts.log_level)
+local current_level = levels.WARN
 
 -- Log history for debugging (keep last 100 entries)
 local log_history = {}
@@ -183,22 +184,8 @@ function M.safe_call(fn, context)
   return true, result
 end
 
--- Initialize logger based on environment
-local function init()
-  -- Set log level based on environment variable
-  local env_level = vim.env.NVIM_LOG_LEVEL
-  if env_level then
-    M.set_level(env_level)
-  else
-    -- Default to WARN in production, DEBUG in development
-    local is_dev = vim.env.NVIM_DEV == "1"
-    M.set_level(is_dev and "DEBUG" or "WARN")
-  end
-
-  M.debug("Logger initialized with level: %s", M.get_level())
-end
-
--- Auto-initialize when module is loaded
-init()
+-- Default to WARN; configure persistently via editor_core.setup({ log_level = ... })
+-- or dynamically via logger.set_level(...).
+M.debug("Logger initialized with level: %s", M.get_level())
 
 return M

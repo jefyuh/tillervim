@@ -51,13 +51,14 @@ function M.key(name)
   if not c.key.name then
     return notify("No provider offers an API key (see :checkhealth agent_workbench)", WARN)
   end
+  local kp = c.key_profiles[c.key.name]
   local how = c.key.auto and ("auto → %s"):format(c.key.label) or c.key.label
-  notify(("AI key: %s (%s)"):format(how, c.codecompanion.api_key))
+  notify(("AI key: %s (%s)"):format(how, kp.api_key))
   -- Still switched: the variable may be exported later, and the choice is
   -- about which key, not whether one is present yet.
-  if not is_set(c.codecompanion.api_key) then
+  if not kp.key_spec.configured() then
     notify(("%s is not set — inline edits and command prompts refuse until it is")
-      :format(c.codecompanion.api_key), WARN)
+      :format(kp.api_key), WARN)
   end
 end
 
@@ -66,8 +67,9 @@ local function pad(text, width)
   return text .. string.rep(" ", math.max(width - vim.fn.strdisplaywidth(text), 0))
 end
 
-local function key_status(var)
-  return ("%s %s"):format(var, is_set(var) and "✓" or "✗ not set")
+local function key_status(profile)
+  if profile.key_spec.source == "function" then return "function (on demand)" end
+  return ("%s %s"):format(profile.api_key, profile.key_spec.configured() and "✓" or "✗ not set")
 end
 
 ---Pick a key profile with vim.ui.select (Snacks renders it): `auto` first,
@@ -81,13 +83,13 @@ function M.pick()
   local auto_target = c.key_profiles[auto_name]
   local items = { {
     name = "auto", current = c.key.auto,
-    text = "auto → " .. auto_target.label, detail = key_status(auto_target.api_key),
+    text = "auto → " .. auto_target.label, detail = key_status(auto_target),
   } }
   for _, name in ipairs(c.key_names()) do
     local p = c.key_profiles[name]
     items[#items + 1] = {
       name = name, current = not c.key.auto and c.key.name == name,
-      text = p.label, detail = key_status(p.api_key),
+      text = p.label, detail = key_status(p),
     }
   end
 
@@ -114,7 +116,8 @@ local function gather()
   local profiles = {}
   for _, name in ipairs(config.key_names()) do
     local p = config.key_profiles[name]
-    profiles[name] = { label = p.label, var = p.api_key, set = set(p.api_key) }
+    local state_text = p.key_spec.source == "function" and "on demand" or (p.key_spec.configured() and "set" or "not set")
+    profiles[name] = { label = p.label, var = p.api_key, set = p.key_spec.configured(), state = state_text }
   end
 
   -- Each provider in order, with the parts it offers and whether each can
@@ -148,7 +151,7 @@ local function gather()
       label = config.key.label,
       auto = config.key.auto,
       var = config.codecompanion.api_key,
-      set = config.codecompanion.api_key ~= nil and set(config.codecompanion.api_key),
+      set = config.codecompanion.key_spec ~= nil and config.codecompanion.key_spec.configured(),
     },
     profiles = profiles,
     cli_keys = cli_keys,
@@ -185,8 +188,7 @@ function M.info()
   for name in pairs(info.profiles) do width = math.max(width, #name) end
   for i, name in ipairs(c.key_names()) do
     local p = info.profiles[name]
-    add("%s%s  %s %s", i == 1 and "Profiles  " or "          ", pad(name, width), p.var,
-      p.set and "set" or "not set")
+    add("%s%s  %s %s", i == 1 and "Profiles  " or "          ", pad(name, width), p.var, p.state)
   end
 
   local cli = {}

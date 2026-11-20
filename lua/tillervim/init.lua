@@ -30,6 +30,28 @@ function M.prepare()
   for _, name in ipairs({ "editor-core", "agent-workbench", "git-review", "llama-service" }) do
     vim.opt.rtp:append(root .. "/local-plugin/" .. name .. ".nvim")
   end
+  -- Virtual lazy packages already sit on rtp, which would otherwise satisfy
+  -- require() before lazy.nvim's autoloader can run their setup(opts).
+  local lazy_packages = { git_review = "git-review.nvim", llama_service = "llama-service.nvim" }
+  local loading = {}
+  table.insert(package.loaders, 2, function(mod)
+    local head = mod:match("^([%w_]+)")
+    local plugin = head and lazy_packages[head]
+    if not plugin or loading[plugin] then return nil end
+    local cfg = package.loaded["lazy.core.config"]
+    local spec = cfg and cfg.plugins and cfg.plugins[plugin]
+    if not spec or spec._.loaded then return nil end
+    loading[plugin] = true
+    package.loaded[mod] = nil
+    local ok, err = pcall(function() require("lazy").load({ plugins = { plugin } }) end)
+    loading[plugin] = false
+    assert(ok, err)
+    local loaded_mod = package.loaded[mod]
+    if type(loaded_mod) == "table" then
+      return function() return loaded_mod end
+    end
+    return nil
+  end)
 end
 
 function M.setup()
