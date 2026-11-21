@@ -371,6 +371,63 @@ do
   check_file(1, 3, report, "tilde paths expand without changing the working directory")
   vim.uv.os_homedir = homedir
 
+  -- Line/column suffixes (`:line`, `:line:col`, `#Lline`, `file:///...#Lline`),
+  -- CJK punctuation (`（` `、` `）`) and indented TUI soft-wraps (Antigravity / Codex).
+  do
+    local opt_file = root .. "/local-plugin/agent-workbench.nvim/lua/agent_workbench/options.lua"
+    local ai_file = root .. "/lua/tillervim/config/ai.lua"
+    local term_file = root .. "/local-plugin/agent-workbench.nvim/lua/agent_workbench/terminal.lua"
+    local home_file = root .. "/home/.config/nvim/lua/plugins/agent.lua"
+    for _, f in ipairs({ opt_file, ai_file, term_file, home_file }) do
+      vim.fn.mkdir(vim.fs.dirname(f), "p")
+      local sample = {}
+      for idx = 1, 70 do sample[idx] = ("  line %d"):format(idx) end
+      vim.fn.writefile(sample, f)
+    end
+
+    vim.uv.os_homedir = function() return root .. "/home" end
+    local agy_panel = fixture({
+      "    修复：已将仓库默认配置（local-plugin/agent-workbench.nvim/lua/agent_workbench/opt",
+      "    ions.lua:10、lua/tillervim/config/ai.lua:15、local-plugin/agent-workbench.nvim/lu",
+      "    a/agent_workbench/terminal.lua:62）与你的个人配置",
+      "    ~/.config/nvim/lua/plugins/agent.lua:34 全部改为 '{\"altScreenMode\":\"always\"}'。",
+      "    修改了lua/tillervim/config/ai.lua:22:5并更新了配置。",
+      "    链接 [spec](file://" .. ai_file .. "#L40-L45)。",
+    }, true)
+    vim.b[agy_panel].agent_workbench = { cwd = root }
+    local agy_win = a.nvim_get_current_win()
+
+    local function check_jump(r, needle, want_file, want_line, want_col, label)
+      a.nvim_set_current_win(agy_win)
+      local line_str = a.nvim_buf_get_lines(agy_panel, r - 1, r, false)[1]
+      local c = line_str:find(needle, 1, true) - 1
+      check_file(r, c, want_file, label)
+      t.eq(a.nvim_win_get_cursor(0)[1], want_line, label .. " (cursor line)")
+      if want_col then
+        t.eq(a.nvim_win_get_cursor(0)[2], want_col - 1, label .. " (cursor col)")
+      end
+    end
+
+    check_jump(1, "workbench", opt_file, 10, nil,
+      "first half of indented TUI-wrapped path inside CJK parens opens whole")
+    check_jump(2, "ions.lua", opt_file, 10, nil,
+      "second half of indented TUI-wrapped path opens whole")
+    check_jump(2, "tillervim/config", ai_file, 15, nil,
+      "middle path between ideographic commas opens with :line")
+    check_jump(2, "nvim/lu", term_file, 62, nil,
+      "trailing wrapped path after ideographic comma opens whole from row 2")
+    check_jump(3, "terminal.lua", term_file, 62, nil,
+      "trailing wrapped path before closing fullwidth paren opens whole from row 3")
+    check_jump(4, "plugins/agent.lua", home_file, 34, nil,
+      "tilde path with :line suffix opens and jumps to line")
+    check_jump(5, "ai.lua:22:5", ai_file, 22, 5,
+      "CJK prose glued directly to path:line:col opens at line and column")
+    check_jump(6, "file://", ai_file, 40, nil,
+      "file:// URI with #Lstart-Lend opens in Nvim at start line")
+
+    vim.uv.os_homedir = homedir
+  end
+
   local mixed = report .. " https://example.com/report.md"
   fixture({ mixed }, false)
   check(1, #report + 5, "https://example.com/report.md", "a URL stays external when a file is on the same row")
