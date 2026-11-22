@@ -13,13 +13,29 @@ local url_chars = "[%w%-%._~:/?#%[%]@!$&'()*+,;%%=\128-\255]+"
 -- such character ends the URL text.
 local cjk_punctuation =
   [=[[\u2018\u2019\u201c\u201d\u2026\u3000-\u303f\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]]=]
+-- Box-drawing / block-element glyphs (borders, quote bars, scrollbars) never
+-- belong to unquoted URLs or file paths.
+local frame_glyph = [=[[\u2500-\u259f]]=]
+local literal_separators = {
+  "\t", "|", "│", "┃", "║", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█", "▐", "▕", "░", "▒", "▓",
+}
+local cjk_pairs = {
+  ["（"] = "）",
+  ["「"] = "」",
+  ["『"] = "』",
+  ["“"] = "”",
+  ["‘"] = "’",
+  ["【"] = "】",
+  ["《"] = "》",
+}
 local max_lines = 16
 -- Rows a run the terminal wrapped may add on top of max_lines: a signed URL
 -- of a few thousand bytes in a narrow panel, not a whole scrollback.
 local max_wrapped = 256
 
--- Terminal table columns are separated by padding or vertical rules. Keep
--- byte positions for the cursor and display columns for alignment across CJK.
+-- Terminal table columns, TUI borders and scrollbars are separated by padding
+-- or vertical rules/blocks. Keep byte positions for the cursor and display
+-- columns for alignment across CJK.
 local function cells(line)
   -- Quoted filenames may contain padding or vertical rules literally. Mask
   -- closed quotes for separator lookup, preserving byte offsets into the text.
@@ -27,8 +43,10 @@ local function cells(line)
   local result, from = {}, 1
   while from <= #line do
     local first, last = #line + 1, #line
-    for _, separator in ipairs({ "%s%s+", "\t", "|", "│", "┃", "║" }) do
-      local s, e = layout:find(separator, from)
+    local ps, pe = layout:find("%s%s+", from)
+    if ps and ps < first then first, last = ps, pe end
+    for _, separator in ipairs(literal_separators) do
+      local s, e = layout:find(separator, from, true)
       if s and s < first then first, last = s, e end
     end
     local spaces, text = line:sub(from, first - 1):match("^(%s*)(.-)%s*$")
@@ -50,20 +68,25 @@ local function url_piece(text)
   if not piece then return nil end
   local stop = vim.fn.match(piece, cjk_punctuation)
   if stop >= 0 then piece = piece:sub(1, stop) end
-  return piece
+  local frame = vim.fn.match(piece, frame_glyph)
+  if frame >= 0 then piece = piece:sub(1, frame) end
+  return piece ~= "" and piece or nil
 end
 
 local function trim_url(url)
   -- Sentence punctuation and Markdown wrappers are not part of the URL;
   -- balanced parentheses inside a path (e.g. a Wikipedia URL) are.
-  url = url:gsub("[.,;:!]+$", "")
-  for _, pair in ipairs({ { "(", ")" }, { "[", "]" } }) do
-    local _, opens = url:gsub("%" .. pair[1], "")
-    local _, closes = url:gsub("%" .. pair[2], "")
-    while closes > opens and url:sub(-1) == pair[2] do
-      url, closes = url:sub(1, -2), closes - 1
+  repeat
+    local prev = url
+    url = url:gsub("[.,;:!]+$", "")
+    for _, pair in ipairs({ { "(", ")" }, { "[", "]" } }) do
+      local _, opens = url:gsub("%" .. pair[1], "")
+      local _, closes = url:gsub("%" .. pair[2], "")
+      while closes > opens and url:sub(-1) == pair[2] do
+        url, closes = url:sub(1, -2), closes - 1
+      end
     end
-  end
+  until url == prev
   return url
 end
 
@@ -79,42 +102,131 @@ local function wraps_at(ctx, i)
   return wraps
 end
 
--- Whether `next_line` can continue an unquoted file path that reached the end
--- of `line` inside an indented TUI block (Antigravity, Codex, Markdown lists).
--- Existence on disk (`local_file`) still gates every joined candidate, while
--- indentation alignment rejects neighboring table columns (`next_indent >> indent`).
-local function tui_file_wraps(line, next_line)
-  if not line or not next_line or line == "" then return nil end
-  local lead = line:match("^%s*") or ""
-  local indent = vim.fn.strdisplaywidth(lead)
-  local bullet = vim.fn.matchstr(line, [[^\s*\([•·\-*+]\|\d\+[.)]\)\s\+]])
-  local bullet_indent = bullet ~= "" and vim.fn.strdisplaywidth(bullet) or nil
+local function delimiter_before(text, start)
+  if start <= 1 then return nil, nil end
+  local ch = text:sub(start - 1, start - 1)
+  if ch == "(" then return "(", ")" end
+  if ch == "<" then return "<", ">" end
+  if ch == '"' or ch == "'" or ch == "`" then return ch, ch end
+  if start >= 4 then
+    local wide = text:sub(start - 3, start - 1)
+    if cjk_pairs[wide] then return wide, cjk_pairs[wide] end
+  end
+  return nil, nil
+end
 
-  local next_lead = next_line:match("^%s*") or ""
-  local next_indent = vim.fn.strdisplaywidth(next_lead)
-  local next_rest = next_line:sub(#next_lead + 1)
-  if next_rest == "" or next_indent == 0 or next_indent > 16 then return nil end
-  if vim.fn.match(next_rest, [[^\%([•·\-*+]\|#\+\|\d\+[.)]\)\s]]) >= 0 then return nil end
-  if next_rest:find("^https?://") or next_rest:find("^file://") then return nil end
-  if vim.fn.match(next_rest, [=[^[-_=─━═┄┅┈┉│|┃║]]=]) >= 0 then return nil end
+local bullet_pattern = [[^\%([•·◦▪▸▹‣⁃⎿└├\-*+]\|#\+\|\d\+[.)]\)\s\+]]
+local rule_pattern = [[^[-_=─━═┄┅┈┉]\+$]]
 
-  local aligned = math.abs(next_indent - indent) <= 2
-    or (bullet_indent ~= nil and math.abs(next_indent - bullet_indent) <= 2)
-  if not aligned then return nil end
-  return { text = next_rest, col = #next_lead + 1, display_col = next_indent }
+-- Media, document and archive deliverables that belong in the OS player/viewer
+-- (`vim.ui.open`) rather than a Neovim buffer (`:edit` on `.mp4` only extracts
+-- a static frame-0 image without video playback or audio).
+local EXTERNAL_FILE_EXTS = {
+  mp4 = true, mov = true, m4v = true, mkv = true, webm = true, avi = true,
+  flv = true, wmv = true, mpg = true, mpeg = true, ["3gp"] = true,
+  mp3 = true, m4a = true, wav = true, flac = true, ogg = true, opus = true,
+  aac = true, aiff = true,
+  pdf = true, epub = true,
+  doc = true, docx = true, xls = true, xlsx = true, ppt = true, pptx = true,
+  pages = true, numbers = true, key = true, odt = true, ods = true, odp = true,
+  dmg = true, pkg = true, zip = true, rar = true, ["7z"] = true,
+}
+
+local function opens_externally(path)
+  local ext = vim.fn.fnamemodify(path, ":e"):lower()
+  return ext ~= "" and EXTERNAL_FILE_EXTS[ext] == true
+end
+
+local function list_body_col(cell)
+  local marker = vim.fn.matchstr(cell.text, bullet_pattern)
+  return marker ~= "" and (cell.display_col + vim.fn.strdisplaywidth(marker)) or nil
+end
+
+local function starts_new_item(text)
+  return text:find("^https?://") ~= nil
+    or text:find("^file://") ~= nil
+    or vim.fn.match(text, rule_pattern) >= 0
+    or vim.fn.match(text, bullet_pattern) >= 0
+end
+
+-- Find an aligned cell on `target_row` continuing `start_cell` (from `origin_row`)
+-- across table columns, framed TUI boxes, bullet lists or indented TUI paragraphs.
+local function next_aligned_cell(ctx, origin_row, start_cell, prev_row, delimited)
+  local next_cells = ctx.rows[prev_row + 1]
+  if not next_cells or #next_cells == 0 then return nil end
+
+  local origin_cells = ctx.rows[origin_row] or {}
+  local column = start_cell.display_col
+  local body_col = list_body_col(start_cell)
+
+  for _, nc in ipairs(next_cells) do
+    if nc.display_col == column or (body_col and nc.display_col == body_col) then
+      if not nc.text:find("^https?://") and not nc.text:find("^file://")
+        and vim.fn.match(nc.text, rule_pattern) < 0
+      then
+        if nc.display_col == body_col and starts_new_item(nc.text) then return nil end
+        if not delimited and starts_new_item(nc.text) then return nil end
+        -- Plain unindented shell output at raw col 0 (e.g. `ls -F` printing
+        -- `dir/` above `file`) is only joined when the row filled a lagged PTY.
+        if not delimited and column == 0 and nc.display_col == 0 and start_cell.col == 1 and nc.col == 1 then
+          if not ctx.width or vim.fn.strdisplaywidth(ctx.lines[prev_row] or "") < math.max(20, ctx.width - 10) then
+            return nil
+          end
+        end
+        return nc
+      end
+    end
+  end
+
+  -- Single-cell indented TUI paragraph / list wrap (`±2` columns, or wrapping
+  -- back to the row's leading indent after a `Label:  path` cell split).
+  if #next_cells == 1 then
+    local nc = next_cells[1]
+    if nc.display_col > 0 and not starts_new_item(nc.text) then
+      if #origin_cells == 1 then
+        if (column > 0 and math.abs(nc.display_col - column) <= 2)
+          or (body_col and math.abs(nc.display_col - body_col) <= 2)
+        then
+          return nc
+        end
+      elseif start_cell == origin_cells[#origin_cells] then
+        local first_cell = origin_cells[1]
+        local line_col = first_cell.display_col
+        local line_body = list_body_col(first_cell)
+        if (line_col > 0 and math.abs(nc.display_col - line_col) <= 2)
+          or (line_body and math.abs(nc.display_col - line_body) <= 2)
+        then
+          return nc
+        end
+      end
+    elseif delimited and nc.display_col == 0 and not starts_new_item(nc.text)
+      and start_cell == origin_cells[#origin_cells]
+      and origin_cells[1] and origin_cells[1].display_col == 0
+    then
+      return nc
+    end
+  end
+  return nil
 end
 
 -- `ctx` holds, by row number, the scanned rows' cells (`rows`) and raw text
 -- (`lines`), whether they are `terminal` output, the grid's `width`, and the
 -- `wraps` that wraps_at has answered.
-local function candidate(ctx, row, cell, start, file)
-  local opening = cell.text:sub(start - 1, start - 1)
-  local quoted = file and (opening == '"' or opening == "'" or opening == "`")
-  local delimited = quoted or opening == "(" or opening == "<"
+local function candidate(ctx, row, start_cell, start, file, scheme_prefix)
+  local opening, closer = delimiter_before(start_cell.text, start)
+  local ascii_quote = opening == '"' or opening == "'" or opening == "`"
+  local quoted = file and ascii_quote
+  local delimited = closer ~= nil
   local function get_piece(text)
     if quoted then return text:match("^[^" .. opening .. "]+") end
-    return url_piece(text)
+    local p = url_piece(text)
+    if p and ascii_quote then
+      local q = p:find(opening, 1, true)
+      if q then p = p:sub(1, q - 1) end
+    end
+    return p ~= "" and p or nil
   end
+  local cell = start_cell
   local tail = cell.text:sub(start)
   local piece = get_piece(tail)
   if not piece or piece == "" then return nil end
@@ -124,10 +236,9 @@ local function candidate(ctx, row, cell, start, file)
   }
 
   local url, spans, partials = "", {}, {}
-  local column = cell.display_col
   -- `wrapped`: the terminal wrapped the row just read, so the text resumes in
-  -- column 0 of the next one. `tui_cont`: an indented TUI block wrapped a file
-  -- path onto the next aligned line. `unwrapped`: either happened at least once.
+  -- column 0 of the next one. `tui_cont`: an aligned TUI cell continues the
+  -- target on the next row. `unwrapped`: soft-wrap (or file TUI wrap) happened.
   local wrapped, tui_cont, unwrapped = false, nil, false
   -- Rows down a table column count against max_lines, rows the terminal
   -- wrapped against max_wrapped: a long link stays whole.
@@ -144,26 +255,19 @@ local function candidate(ctx, row, cell, start, file)
       if column_rows > max_lines then break end
     end
     if next_row > row then
-      local continuation
-      if wrapped then
+      local continuation = wrapped
         -- The whole row, not its first cell: a wrap splits text anywhere, so
         -- the padding and rules that separate cells mean nothing here.
-        continuation = { text = ctx.lines[next_row], col = 1, display_col = 0 }
-      elseif tui_cont then
-        continuation = tui_cont
-      else
-        for _, next_cell in ipairs(ctx.rows[next_row] or {}) do
-          if next_cell.display_col == column then continuation = next_cell; break end
-        end
-        if not continuation or continuation.text:find("https?://") then break end
-      end
+        and { text = ctx.lines[next_row], col = 1, display_col = 0 }
+        or tui_cont
+      if not continuation then break end
       cell, start, tail = continuation, 1, continuation.text
       piece = get_piece(tail)
       if not piece or piece == "" then break end
       -- Use a Unicode-aware pattern: table rules are now valid token bytes too.
       -- Not after a wrap: soft_wraps already refuses a row led by a rule, and
       -- a wrapped tail can be all "=" (base64 padding).
-      if not wrapped and vim.fn.match(piece, [[^[-_=─━═┄┅┈┉]\+$]]) >= 0 then break end
+      if not wrapped and vim.fn.match(piece, rule_pattern) >= 0 then break end
       -- A link starting in column 0 is the next link, not this one's tail.
       if (wrapped or tui_cont) and piece:find("^https?://") then break end
     end
@@ -180,13 +284,10 @@ local function candidate(ctx, row, cell, start, file)
       if file then partials[#partials + 1] = { url = inner, spans = vim.deepcopy(spans) } end
       return { url = inner, spans = spans, partials = partials, fallback = fallback }
     end
-    if opening == "<" and tail:sub(#piece + 1, #piece + 1) == ">" then
-      if file then partials[#partials + 1] = { url = url, spans = vim.deepcopy(spans) } end
-      return { url = url, spans = spans, partials = partials, fallback = fallback }
-    end
-    if quoted and tail:sub(#piece + 1, #piece + 1) == opening then
-      partials[#partials + 1] = { url = url, spans = vim.deepcopy(spans) }
-      return { url = url, spans = spans, partials = partials, fallback = fallback }
+    if closer and opening ~= "(" and tail:sub(#piece + 1, #piece + #closer) == closer then
+      local clean = file and url or trim_url(url)
+      if file then partials[#partials + 1] = { url = clean, spans = vim.deepcopy(spans) } end
+      return { url = clean, spans = spans, partials = partials, fallback = fallback }
     end
     -- Only join terminal rendering. Source newlines stay real.
     if not ctx.terminal then break end
@@ -194,16 +295,16 @@ local function candidate(ctx, row, cell, start, file)
     -- goes on in column 0, bare or enclosed, whatever column it started in.
     wrapped = last == #ctx.lines[next_row] and wraps_at(ctx, next_row)
     tui_cont = nil
-    if not wrapped and file and not quoted then
-      local trimmed_len = #ctx.lines[next_row]:gsub("%s+$", "")
-      if last == trimmed_len then
-        tui_cont = tui_file_wraps(ctx.lines[next_row], ctx.lines[next_row + 1])
+    if not wrapped and #piece == #tail and not unwrapped then
+      if delimited or file or (scheme_prefix and next_row == row) then
+        tui_cont = next_aligned_cell(ctx, row, start_cell, next_row, delimited)
       end
     end
-    unwrapped = unwrapped or wrapped or (tui_cont ~= nil)
-    -- Otherwise only an enclosed target continues, only down its table column
+    unwrapped = unwrapped or wrapped or (file and tui_cont ~= nil)
+      or (scheme_prefix and next_row == row and tui_cont ~= nil)
+    -- Otherwise only an enclosed target continues, only down its aligned column
     -- and only once its closing delimiter is found.
-    if not wrapped and not tui_cont and (not delimited or unwrapped or #piece ~= #tail) then break end
+    if not wrapped and not tui_cont then break end
   end
   -- Wrapped text is one line to the program that printed it, so what it
   -- joined stands without a closing delimiter. A file path keeps its prefixes
@@ -253,9 +354,11 @@ local function local_file(raw)
     if resolved then return { path = resolved, lnum = tonumber(lnum), col = tonumber(col) } end
   end
 
-  -- Strip compiler / grep / TUI :line[:col][:] suffixes.
+  -- Strip compiler / grep / yank_path / TUI :line[:col][-end][:] suffixes.
   local trimmed = raw:gsub(":$", "")
-  base, lnum, col = trimmed:match("^(.+):(%d+):(%d+)$")
+  base, lnum, col = trimmed:match("^(.+):(%d+):(%d+)%-%d+$")
+  if not base then base, lnum, col = trimmed:match("^(.+):(%d+):(%d+)$") end
+  if not base then base, lnum = trimmed:match("^(.+):(%d+)%-L?%d+$") end
   if not base then base, lnum = trimmed:match("^(.+):(%d+)$") end
   if base and base ~= "" then
     local resolved = existing_file(base)
@@ -266,6 +369,27 @@ local function local_file(raw)
     if resolved then return { path = resolved } end
   end
   return nil
+end
+
+local function resolve_file_part(part)
+  local resolved = local_file(part.url)
+  if resolved then return part, resolved end
+  -- CJK prose glued straight onto the end of a path or :line:col (e.g.
+  -- `ai.lua:22:5并更新了配置` or `/tmp/中文目录/ai.lua:10的说明`).
+  local cut = vim.fn.match(part.url, [=[\v[!-~]\zs[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff][^/]*$]=])
+  if cut > 0 then
+    local shorter = trim_url(part.url:sub(1, cut))
+    resolved = local_file(shorter)
+    if resolved then
+      local trimmed_spans = vim.deepcopy(part.spans)
+      local tail_span = trimmed_spans[#trimmed_spans]
+      if tail_span then
+        tail_span.last = math.max(tail_span.first, tail_span.last - (#part.url - #shorter))
+      end
+      return { url = shorter, spans = trimmed_spans }, resolved
+    end
+  end
+  return part, nil
 end
 
 local function each_file_start(text, cb)
@@ -301,10 +425,49 @@ local function each_file_start(text, cb)
   end
 end
 
----Open the nearest HTTP(S) URL or existing local file on this row.
----In terminals, targets continue across rows the terminal wrapped, and
----enclosed targets also down their table column.
+local function open_local_file(resolved)
+  if opens_externally(resolved.path) then
+    vim.ui.open(resolved.path)
+    return
+  end
+  -- From a panel (an agent terminal, a chat) the file goes to the editor
+  -- in this tab, leaving the panel and its process intact.
+  vim.api.nvim_set_current_win(require("editor_core.buffer").editor_target())
+  vim.cmd.edit({ args = { resolved.path }, magic = { file = false, bar = false } })
+  if resolved.lnum then
+    local total = vim.api.nvim_buf_line_count(0)
+    local lnum = math.max(1, math.min(resolved.lnum, total))
+    local c = math.max(0, (resolved.col or 1) - 1)
+    pcall(vim.api.nvim_win_set_cursor, 0, { lnum, c })
+  end
+end
+
+---Open the nearest HTTP(S) URL or existing local file on this row (or Visual selection).
+---In terminals, targets continue across rows the terminal wrapped, across `url`
+---highlight extmarks, and across aligned table / TUI cells.
 function M.open()
+  local mode = vim.fn.mode()
+  if mode:find("^[vV\22]") then
+    local region = vim.fn.getregion(vim.fn.getpos("."), vim.fn.getpos("v"), { type = mode })
+    vim.cmd.normal({ args = { vim.keycode("<Esc>") }, bang = true })
+    local parts = {}
+    for idx, l in ipairs(region) do
+      parts[idx] = #region > 1
+        and vim.fn.substitute(l, [=[^\s*[│┃║▏▎▍▌|]\?\s*\|\s*[│┃║▏▎▍▌█▐▕░▒▓|]\?\s*$]=], "", "g")
+        or vim.trim(l)
+    end
+    local selected = trim_url(table.concat(parts, ""):gsub("^([\"'`])(.-)%1$", "%2"))
+    if selected ~= "" then
+      local _, resolved = resolve_file_part({ url = selected, spans = {} })
+      if resolved then
+        open_local_file(resolved)
+      else
+        vim.ui.open(selected)
+      end
+    end
+    return
+  end
+
   local cursor = vim.api.nvim_win_get_cursor(0)
   local row, col = cursor[1], cursor[2] + 1
   local terminal = vim.bo.buftype == "terminal"
@@ -354,44 +517,66 @@ function M.open()
           best, best_distance = {
             target = resolved and resolved.path or link.url,
             file = resolved ~= nil,
-            lnum = resolved and resolved.lnum or nil,
-            col = resolved and resolved.col or nil,
+            resolved = resolved,
           }, distance
         end
       end
     end
   end
+
+  -- OSC 8 terminal hyperlinks attach `details.url` to highlight extmarks across
+  -- every wrapped row of the link, even when the visible label omits the path.
+  local row_len = #(ctx.lines[row] or "")
+  local extmarks = vim.api.nvim_buf_get_extmarks(0, -1, { row - 1, 0 }, { row - 1, -1 }, {
+    details = true,
+    type = "highlight",
+    overlap = true,
+  })
+  for _, mark in ipairs(extmarks) do
+    local details = mark[4]
+    if details and type(details.url) == "string" and details.url ~= "" then
+      local span_first = mark[2] < row - 1 and 1 or (mark[3] + 1)
+      local end_row = details.end_row or mark[2]
+      local span_last = end_row > row - 1 and math.max(1, row_len)
+        or math.max(span_first, details.end_col or (mark[3] + 1))
+      local resolved = local_file(details.url)
+      consider({ url = details.url, spans = { { row = row, first = span_first, last = span_last } } }, resolved)
+    end
+  end
+
   for i = first, row do
     for _, cell in ipairs(rows[i]) do
       for start in cell.text:gmatch("()https?://") do
         consider(candidate(ctx, i, cell, start))
       end
       -- A wrap can cut the scheme itself ("htt" | "ps://"), leaving no row
-      -- that holds "https://": start from a prefix of it at the row's edge.
-      if terminal and cell.col + #cell.text - 1 == #ctx.lines[i] then
+      -- that holds "https://": start from a prefix of it at the cell's edge.
+      if terminal then
         for k = 7, 1, -1 do
           local start = #cell.text - k + 1
-          local prefix = cell.text:sub(start)
-          if (("https://"):sub(1, k) == prefix or ("http://"):sub(1, k) == prefix)
-            and not prefix:find("^https?://$")
-          then
-            -- Not inside a word or a link: a base64 row ending in "h" is no
-            -- scheme, and walking its run from every such row is quadratic.
-            if not cell.text:sub(start - 1, start - 1):find("[%w%-%._~%%/=?&#+@!$*,;]") then
-              local link = candidate(ctx, i, cell, start)
-              if link and link.url:find("^https?://") then consider(link) end
+          if start >= 1 then
+            local prefix = cell.text:sub(start)
+            if (("https://"):sub(1, k) == prefix or ("http://"):sub(1, k) == prefix)
+              and not prefix:find("^https?://$")
+            then
+              -- Not inside a word or a link: a base64 row ending in "h" is no
+              -- scheme, and walking its run from every such row is quadratic.
+              if not cell.text:sub(start - 1, start - 1):find("[%w%-%._~%%/=?&#+@!$*,;]") then
+                local link = candidate(ctx, i, cell, start, false, true)
+                if link and link.url:find("^https?://") then consider(link) end
+              end
+              break
             end
-            break
           end
         end
       end
       each_file_start(cell.text, function(start, token)
         -- A token at the start of a row that the row above wraps into, right
-        -- after a token that ran into the edge, is that token's tail: its
-        -- candidate walks on through this row. Starting again here made a
-        -- long wrapped run cost the square of its rows.
+        -- after an ASCII path/token byte at the edge, is that token's tail: its
+        -- candidate walks on through this row. Starting again here made a long
+        -- wrapped run cost the square of its rows.
         local tail_of_above = i > first and cell.col == 1 and start == 1
-          and ctx.lines[i - 1]:find("[^%s<>\"'`%(%)%[%]]$") ~= nil and wraps_at(ctx, i - 1)
+          and ctx.lines[i - 1]:find("[%w%-%._~:/?#%%@!$&*+,;=]$") ~= nil and wraps_at(ctx, i - 1)
         -- Existence distinguishes files (including extensionless names) from
         -- prose; directories such as a wrapped /tmp/ are never opened as files.
         if (not token:find("://", 1, true) or token:find("^file://")) and not tail_of_above then
@@ -405,23 +590,7 @@ function M.open()
                 if sp.row == row then covers_row = true; break end
               end
               if covers_row then
-                local resolved = local_file(part.url)
-                local matched_part = part
-                if not resolved and (part.url:byte(1) or 128) < 128 then
-                  local cut = vim.fn.match(part.url, [=[[\u3400-\u9fff\uf900-\ufaff]]=])
-                  if cut > 0 then
-                    local shorter = trim_url(part.url:sub(1, cut))
-                    resolved = local_file(shorter)
-                    if resolved then
-                      local trimmed_spans = vim.deepcopy(part.spans)
-                      local tail_span = trimmed_spans[#trimmed_spans]
-                      if tail_span then
-                        tail_span.last = math.max(tail_span.first, tail_span.last - (#part.url - #shorter))
-                      end
-                      matched_part = { url = shorter, spans = trimmed_spans }
-                    end
-                  end
-                end
+                local matched_part, resolved = resolve_file_part(part)
                 if resolved then
                   consider(matched_part, resolved)
                   break
@@ -434,16 +603,7 @@ function M.open()
     end
   end
   if best and best.file then
-    -- From a panel (an agent terminal, a chat) the file goes to the editor
-    -- in this tab, leaving the panel and its process intact.
-    vim.api.nvim_set_current_win(require("editor_core.buffer").editor_target())
-    vim.cmd.edit({ args = { best.target }, magic = { file = false, bar = false } })
-    if best.lnum then
-      local total = vim.api.nvim_buf_line_count(0)
-      local lnum = math.max(1, math.min(best.lnum, total))
-      local c = math.max(0, (best.col or 1) - 1)
-      pcall(vim.api.nvim_win_set_cursor, 0, { lnum, c })
-    end
+    open_local_file(best.resolved)
     return
   end
   local target = best and best.target or (vim.bo.buftype == "" and vim.fn.expand("%:p") or "")

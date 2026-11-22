@@ -425,6 +425,116 @@ do
     check_jump(6, "file://", ai_file, 40, nil,
       "file:// URI with #Lstart-Lend opens in Nvim at start line")
 
+    -- Framed TUI boxes, alt-screen scrollbars, bullet-indented backticked/enclosed
+    -- links, :line-end ranges, `url` highlight extmarks, and Visual `gx`.
+    local framed = fixture({
+      "╭──────────────────────────────────────────────────────────────────────────────╮",
+      "│ • 修改了 `local-plugin/agent-workbench.nvim/lua/agent_workbench/opt          │",
+      "│   ions.lua:12-18`                                                            │",
+      "│ • 详见（https://github.com/jefyuh/tillervim/blob/main/                       │",
+      "│   README.md），以及 `https://example.com/wrapped/                            │",
+      "│   backtick`                                                                  │",
+      "│   local-plugin/agent-workbench.nvim/lua/agent_workbench/ter                  █",
+      "│   minal.lua:62:3                                                             ░",
+      "╰──────────────────────────────────────────────────────────────────────────────╯",
+    }, true)
+    vim.b[framed].agent_workbench = { cwd = root }
+    local framed_win = a.nvim_get_current_win()
+
+    local function check_framed_jump(r, needle, want_file, want_line, want_col, label)
+      a.nvim_set_current_win(framed_win)
+      local line_str = a.nvim_buf_get_lines(framed, r - 1, r, false)[1]
+      local c = line_str:find(needle, 1, true) - 1
+      check_file(r, c, want_file, label)
+      t.eq(a.nvim_win_get_cursor(0)[1], want_line, label .. " (cursor line)")
+      if want_col then
+        t.eq(a.nvim_win_get_cursor(0)[2], want_col - 1, label .. " (cursor col)")
+      end
+    end
+
+    check_framed_jump(2, "workbench", opt_file, 12, nil,
+      "bullet-indented backticked path in a TUI box opens from row 1 with :start-end")
+    check_framed_jump(3, "ions.lua", opt_file, 12, nil,
+      "bullet-indented backticked path in a TUI box opens from row 2 with :start-end")
+    a.nvim_set_current_win(framed_win)
+    check(5, 6, "https://github.com/jefyuh/tillervim/blob/main/README.md",
+      "fullwidth CJK-parenthesized URL wrapped inside a TUI box opens whole")
+    check(6, 6, "https://example.com/wrapped/backtick",
+      "backticked URL wrapped inside a TUI box opens whole")
+    check_framed_jump(7, "workbench/ter", term_file, 62, 3,
+      "path wrapped before an alt-screen scrollbar glyph opens whole from row 1")
+    check_framed_jump(8, "minal.lua", term_file, 62, 3,
+      "path wrapped before an alt-screen scrollbar glyph opens whole from row 2")
+
+    -- Visual-mode `gx` joins multi-line terminal selections and opens files in Nvim.
+    a.nvim_set_current_win(framed_win)
+    local r7 = a.nvim_buf_get_lines(framed, 6, 7, false)[1]
+    local r8 = a.nvim_buf_get_lines(framed, 7, 8, false)[1]
+    a.nvim_win_set_cursor(framed_win, { 7, r7:find("local-plugin", 1, true) - 1 })
+    a.nvim_feedkeys("v", "nx", false)
+    a.nvim_win_set_cursor(framed_win, { 8, r8:find(":62:3", 1, true) + 4 - 1 })
+    a.nvim_feedkeys("gx", "mx", false)
+    t.eq(a.nvim_buf_get_name(0), term_file, "Visual gx opens a wrapped terminal path in Nvim")
+    t.eq(a.nvim_win_get_cursor(0), { 62, 2 }, "Visual gx jumps to :line:col")
+
+    -- Highlight extmarks carrying `url` open local files in Nvim even when the label omits the path.
+    a.nvim_set_current_win(framed_win)
+    local link_buf = fixture({ "short-label" }, true)
+    local link_ns = a.nvim_create_namespace("url_extmark_spec")
+    a.nvim_buf_set_extmark(link_buf, link_ns, 0, 0, {
+      end_col = #"short-label",
+      hl_group = "Underlined",
+      url = "file://" .. opt_file .. "#L28",
+    })
+    check_file(1, 2, opt_file, "url highlight extmark opens local file:// in Nvim")
+    t.eq(a.nvim_win_get_cursor(0)[1], 28, "url highlight extmark jumps to #Lline")
+
+    -- Native terminal provider sizes the PTY to the full panel width (no number/signcolumn lag).
+    local native_prov = require("agent_workbench.provider.native")
+    local nbuf
+    local nh = native_prov.open({
+      argv = { "/bin/cat" },
+      cwd = root,
+      width = 50,
+      on_buffer = function(b) nbuf = b end,
+      on_view = function() end,
+      on_exit = function() end,
+    })
+    t.ok(nh ~= nil, "native terminal provider starts")
+    local pty = a.nvim_get_chan_info(vim.bo[nbuf].channel).pty
+    local stty = vim.system({ "sh", "-c", "stty -f " .. vim.fn.shellescape(pty) .. " size" }, { text = true }):wait()
+    t.eq(tonumber((stty.stdout or ""):match("%d+%s+(%d+)")), terminal.grid_width(nbuf),
+      "native terminal PTY width matches grid_width from startup")
+    native_prov.stop(nh)
+
+    -- Wrapped media deliverables in Codex/Antigravity (`(/Users/.../Kabo-\n  Animations-.../Chinese-Sundial.mp4)`)
+    -- join across indented/unindented TUI lines and open via `vim.ui.open` (system player)
+    -- instead of loading raw binary/static frame-0 into a Neovim buffer.
+    local sundial = root .. "/Downloads/Kabo-Animations-Pre-20261121/Chinese-Sundial.mp4"
+    local walkthrough = root .. "/Downloads/Kabo-Animations-Pre-20261121/Kabo-Animations-Pre-Walkthrough.mp4"
+    vim.fn.mkdir(vim.fs.dirname(sundial), "p")
+    vim.fn.writefile({ "fake-mp4" }, sundial)
+    vim.fn.writefile({ "fake-mp4" }, walkthrough)
+
+    local media_panel = fixture({
+      "· 实际成片：在 pre 生成了月球足迹、土星光影、中文日晷和儿童斜坡小车四条视频。抽帧确认画",
+      "  面随讲解变化，中文日晷的汉字和刻度均正常显示。中文成片 (" .. root .. "/Downloads/Kabo-",
+      "  Animations-Pre-20261121/Chinese-Sundial.mp4)",
+      "",
+      "观看完整流程录屏，约 66 秒，生成等待已快进 (" .. root .. "/Downloads/Kabo-Animations-Pre-",
+      "20261121/Kabo-Animations-Pre-Walkthrough.mp4)",
+    }, true)
+    local media_win = a.nvim_get_current_win()
+    for _, pos in ipairs({ { 2, 10 }, { 2, 55 }, { 3, 6 } }) do
+      a.nvim_set_current_win(media_win)
+      check(pos[1], pos[2], sundial, "wrapped .mp4 inside indented bullet opens in system player from row " .. pos[1])
+      t.eq(a.nvim_get_current_buf(), media_panel, "opening .mp4 externally keeps focus in the terminal panel")
+    end
+    for _, pos in ipairs({ { 5, 45 }, { 6, 8 } }) do
+      a.nvim_set_current_win(media_win)
+      check(pos[1], pos[2], walkthrough, "wrapped .mp4 in unindented paragraph opens in system player from row " .. pos[1])
+    end
+
     vim.uv.os_homedir = homedir
   end
 

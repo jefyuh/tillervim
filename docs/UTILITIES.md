@@ -134,12 +134,12 @@ the current tabpage, never another one.
 
 ### URLs and local files (`editor_core.url`)
 
-`open()` implements Normal-mode `gx`: open the nearest HTTP(S) URL or existing
-local file on the current row. URLs use `vim.ui.open`; file references use
-`:edit`, focusing `tillervim.util.buffer.editor_target()` first so a chat or terminal
+`open()` implements Normal- and Visual-mode `gx`: open the nearest HTTP(S) URL or existing
+local file on the current row (or the active Visual selection). URLs use `vim.ui.open`; file references use
+`:edit` (jumping to `:line`, `:line:col`, `:line-end`, or `#Lline` when present, including `file://` URIs and `url` highlight extmarks), focusing `tillervim.util.buffer.editor_target()` first so a chat or terminal
 panel remains intact. File candidates must exist and be regular files.
 Absolute and `~/` paths work; relative paths resolve beside an ordinary source
-file, against a Snacks terminal's recorded `cwd`, or via `tillervim.util.cwd.buffer_dir()`
+file, against an agent or Snacks terminal's recorded `cwd`, or via `tillervim.util.cwd.buffer_dir()`
 otherwise. Quotes and backticks support paths containing spaces, including
 consecutive spaces on one row. Filenames are passed literally to `:edit`, with
 filename expansion and command separators disabled. If no target is found,
@@ -150,15 +150,14 @@ query values. CJK and fullwidth
 punctuation (`，。、（）「」“”…`) ends the URL text, so prose that runs straight
 into a link without a space never leaks into it.
 
-In terminal buffers, targets enclosed in parentheses or angle brackets can span
-up to 16 consecutive rows in the same table column. Alignment uses display
-width, including CJK text; padding and vertical rules separate columns. The
-full target must reach its closing delimiter before continuation is accepted.
-Quoted local paths can also span rows. Any target, bare or enclosed, that runs
+In terminal buffers, targets enclosed in parentheses, angle brackets, quotes, backticks or fullwidth CJK brackets can span
+up to 16 consecutive rows in the same table column or aligned list/paragraph block (ignoring TUI box borders and scrollbar glyphs). Alignment uses display
+width, including CJK text; padding and vertical rules/blocks separate columns. Enclosed URLs
+must reach their closing delimiter before continuation is accepted. Local file paths also continue across aligned indented TUI lines when the joined path exists on disk. Any target, bare or enclosed, that runs
 into the right edge of a row the terminal wrapped (`editor_core.terminal_text.soft_wraps`)
 continues from column 0 of the next row, whatever column it started in; that
 join needs no closing delimiter, and a file path whose joined form does not
-exist falls back to its first row.
+exist falls back to its shorter prefix.
 
 Wrapped rows do not count against the 16-row window. The window grows over
 the wrapped run through the cursor row, up to 256 rows each way, so a long

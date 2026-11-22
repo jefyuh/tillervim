@@ -978,9 +978,12 @@ sourcemap mapping is derived from. Nothing else needs configuring; a hand-set
   terminal input with `jk` or `Ctrl-\`, then use `;f` to reopen your file in an
   editor window.
 - **`gx` cannot open a local report path in agent output** — existing file
-  references now open in Nvim, reusing an editor window in the current tab and
-  preserving the terminal. Parenthesized paths can wrap across terminal rows;
-  press `Ctrl-\` or `jk`, then `gx` on either part. Paths must exist on this
+  references now open in Nvim (jumping to `:line`, `:line:col`, `:line-end`, or
+  `#Lline` when present, including `file://` URIs and `url` highlight extmarks), reusing
+  an editor window in the current tab and preserving the terminal. Paths and
+  enclosed links can wrap across terminal rows, indented agent TUI blocks, TUI
+  borders or scrollbars; press `Ctrl-\` or `jk`, then `gx` on any part (or
+  select the range in Visual mode and press `gx`). Paths must exist on this
   machine; an incomplete path or a directory prefix alone is not opened.
 - **`gx` opens only the first half of a terminal table URL** — the mapping now
   reconstructs parenthesized or angle-bracket links across up to 16 rows in the

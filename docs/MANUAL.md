@@ -262,8 +262,10 @@ needed — in markdown, help, checkhealth and man buffers, under its own
 `outline` heading.
 
 `gx` opens the nearest HTTP(S) URL or existing local file on the current line:
-URLs use the system browser; referenced files open in Nvim (jumping to `:line`,
-`:line:col`, or `#Lline` when present, including `file://` URIs). From a terminal,
+URLs and binary media/document deliverables (`.mp4`, `.mov`, `.mp3`, `.pdf`,
+Office/iWork, archives) use the system viewer/player; source, text and image
+files open in Nvim (jumping to `:line`, `:line:col`, or `#Lline` when present,
+including `file://` URIs). From a terminal,
 the file opens in an editor window in the current tab and the terminal stays
 visible. Absolute paths, `~/…`, and relative paths work; relative paths use the
 source file's directory, or the agent/Snacks terminal's recorded working directory.
@@ -271,10 +273,12 @@ Put paths containing spaces inside quotes or backticks. If there is no target,
 an ordinary file buffer retains the fallback of opening itself with the system
 application; terminals do nothing.
 
-In terminal-Normal mode, `gx` also joins targets enclosed in `(...)` or `<...>`
-that wrap within a table column, including a report printed as `(/tmp/` then
-`report.md)` on the next row, as well as file paths wrapped across indented
-paragraph/bullet lines in agent TUIs or separated by CJK punctuation (`（…、…）`). Quoted file paths can wrap too. A link longer
+In terminal-Normal mode, `gx` also joins targets enclosed in `(...)`, `<...>`,
+quotes, backticks, or fullwidth CJK brackets that wrap within a table column or
+list item, including a report printed as `(/tmp/` then `report.md)` on the next
+row, `url` highlight extmarks, and file paths wrapped across indented
+paragraph/bullet lines, TUI boxes or scrollbars, or separated by CJK punctuation
+(`（…、…）`). Visual `gx` joins a multi-line selection too. A link longer
 than the panel, which the terminal itself wrapped so its rest starts in column
 0 of the next row, opens whole as well, enclosed or bare. The cursor can be on
 any part. Leave terminal input with `Ctrl-\` or `jk` first.

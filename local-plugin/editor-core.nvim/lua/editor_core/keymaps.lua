@@ -13,7 +13,7 @@ function M.setup()
   -- it and the mapping never fired. `:w` is the working path.
 
   -- Open URLs externally and referenced files in Nvim, including wrapped terminal links.
-  map("n", "gx", function()
+  map({ "n", "x" }, "gx", function()
     require("editor_core.url").open()
   end, { desc = "Open URL / local file" })
 
