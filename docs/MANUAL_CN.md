@@ -230,7 +230,7 @@ hunk，用的是 CodeDiff 自己的 *Next hunk*。`gO` 在代码里是
 buffer 里是 *Show outline*——标题列表，不需要语言服务器——放在单独的 `outline`
 分区下。
 
-`gx` 打开当前行离光标最近的 HTTP(S) 链接或已存在的本地文件：URL 以及音视频、PDF、Office/iWork、压缩包等二进制产物（如 `.mp4`、`.mov`、`.mp3`、`.pdf`）直接交给系统默认播放器/应用打开；源码、文本与图片文件在 Nvim 内打开（支持 `:行号`、`:行号:列号`、`#L行号` 及 `file://` 链接并自动跳转对应行列）。从终端触发时，文件打开在当前 tab 的编辑窗口，
+`gx` 打开当前行（或 Visual 选区）离光标最近的 HTTP(S) 链接或已存在的本地文件：URL 以及音视频、PDF、Office/iWork、压缩包等二进制产物（如 `.mp4`、`.mov`、`.mp3`、`.pdf`）直接交给系统默认播放器/应用打开；源码、文本与图片文件在 Nvim 内打开（支持 `:行号`、`:行号:列号`、`:起始行-结束行`、`#L行号`、`file://` 链接及 OSC 8 `url` 高亮超链接，并自动跳转对应行列）。从终端触发时，文件打开在当前 tab 的编辑窗口，
 原终端保持可见。支持绝对路径、`~/…` 和相对路径；相对路径以源文件所在目录，
 或 Agent / Snacks 终端记录的工作目录为基准。含空格的路径用引号或反引号包裹。
 没有找到目标时，普通文件 buffer 仍用系统默认应用打开自身；终端不执行打开操作。
@@ -841,13 +841,13 @@ HTTP chat 接收 buffer 文本。目录列表明确拒绝，本期没有 Claude 
 从 CodeDiff 使用 chat 键时，作用于来源 tab。
 
 `ai` 通过 Codex 的 `ctrl+g` 和 `$EDITOR` 把真实输入草稿交给本 Nvim。
-`<C-d>` 返回，取消保留原输入。`<C-v>` 暂存图片并在编辑窗旁弹出 `Snacks.image` 真实缩略图预览（`<M-p>` / `,p` 折叠为紧凑 `[Image #N]` 徽章，`<M-n>` / `]i` / `[i` 切换多图），在 editor 关闭后交给 Codex 自身
-的附件通道并同步到终端面板预览。在任意原生终端面板（`codex`、`agy`、`kimi`、`opencode`）中直接按 `<C-v>` 贴图时，同样会在面板右上角挂出不抢焦点的缩略图与醒目 `[Image #N]` 徽章（`<M-p>` / `,p` 折叠，`<M-x>` / `,P` 关闭，`<CR>` 提交或 `<C-c>` 取消时自动清理）。其他程序的 editor 请求没有 agent owner，不接受 seed 或图片。
+`<C-d>` 返回，取消保留原输入。`<C-v>` 暂存图片并在编辑窗旁弹出 `Snacks.image` 真实缩略图预览（`<M-p>` 折叠为紧凑 `[Image #N]` 徽章，`<M-n>` 切换多图），在 editor 关闭后交给 Codex 自身
+的附件通道并同步到终端面板预览。在任意原生终端面板（`codex`、`agy`、`kimi`、`opencode`）中直接按 `<C-v>` 贴图时，同样会在面板右上角挂出不抢焦点的缩略图与醒目 `[Image #N]` 徽章（`<M-p>` 或 Normal 模式 `,p` 折叠，`<M-n>` 切换多图，`<M-x>` 或 Normal 模式 `,d` 关闭，`<CR>` 提交或 `<C-c>` 取消时自动清理）。其他程序的 editor 请求没有 agent owner，不接受 seed 或图片。
 `ar` 恢复，`aR` 继续，`am` 选模型；会话运行时只聚焦，不向可能含草稿或审批的输入框
 写入命令。`at`/`aT` 阅读 Codex JSONL transcript，独立于终端滚动历史。
 
 个人 `tillervim.json` 选择入口。自定义 provider、HTTP profile、面板宽度、启动参数和本地插件目录在个人 `lua/plugins/` 的 `agent-workbench.nvim` spec 中配置。
-`terminal.provider` 可为 `native`、`snacks` 或自定义内嵌 adapter。tmux 渲染独立选择（`opts.native.codex.wrap_tmux = false` 关闭）。runner/watchdog/teardown 保留启动错误、CJK、滚动历史，
+`terminal.provider` 可为 `native`、`snacks` 或自定义内嵌 adapter。tmux 帧合成独立选择（`opts.native.codex.wrap_tmux = false` 或 `opts.native.antigravity.wrap_tmux = false` 关闭）。runner/watchdog/teardown 保留启动错误、CJK、滚动历史，
 清理所属后代进程；不写 CLI 配置。
 
 `ae` 消耗 HTTP API credits；`ax` / `:AI key` 只切当前进程的 HTTP profile，
@@ -858,8 +858,9 @@ HTTP chat 接收 buffer 文本。目录列表明确拒绝，本期没有 Claude 
 ### 原生终端的本地插件
 
 个人 `agent-workbench.nvim` spec 的 `opts.plugin_dirs` 声明目录。
-入口可为插件目录或带 `codex/<plugin>` 的分发根目录。只在启动原生 Codex 时解析，
-不在 Nvim 启动或 CodeCompanion 启动时安装。Codex 使用临时 `CODEX_HOME` 运行
+入口可为插件目录或带 `codex/<plugin>`、`antigravity/<plugin>` 的分发根目录。
+新建原生终端时解析对应的包。Antigravity 通过 `agy plugin install` 暂存插件，
+再通过 `--add-dir` 加载临时工作区。安装器会提示跳过的 Claude 组件。Codex 使用临时 `CODEX_HOME` 运行
 `plugin add` 刷新快照，仅共享真实 plugin cache；marketplace/enabled 覆盖只属于本次调用，
 不改变用户配置和全局启用状态。
 

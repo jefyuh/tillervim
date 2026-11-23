@@ -51,7 +51,12 @@ assert(#a.backends() == 8 and #a.sessions() == 0)
 for _, kind in ipairs({ "antigravity", "kimi", "opencode" }) do
   local session, err = a.open(kind)
   assert(session and session.alive, vim.inspect(err))
-  assert(vim.b[session.buf].agent_workbench.cmd[1] == (kind == "antigravity" and "agy" or kind))
+  local cmd = vim.b[session.buf].agent_workbench.cmd
+  if kind == "antigravity" and vim.fn.executable("tmux") == 1 then
+    assert(vim.tbl_contains(cmd, "tmux") and vim.tbl_contains(cmd, "agy"), vim.inspect(cmd))
+  else
+    assert(cmd[1] == (kind == "antigravity" and "agy" or kind), vim.inspect(cmd))
+  end
   assert(a.send_context(kind, { text = "draft" }))
   assert(a.hide(kind))
   assert(a.show(kind).buf == session.buf)

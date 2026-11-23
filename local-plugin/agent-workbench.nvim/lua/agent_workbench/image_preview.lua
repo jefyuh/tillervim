@@ -59,23 +59,41 @@ local function resolve_renderer()
   if not M._ui_active() then return nil end
   if M._renderer ~= nil then return M._renderer or nil end
   local snacks = rawget(_G, "Snacks") or package.loaded["snacks"]
-  if type(snacks) ~= "table" or not snacks.image then return nil end
-  if snacks.image.config and snacks.image.config.enabled == false then return nil end
+  local ok_img, img = pcall(function() return type(snacks) == "table" and snacks.image or nil end)
+  if not ok_img or type(img) ~= "table" then return nil end
+  if img.config and img.config.enabled == false then return nil end
+  local ok_parts = pcall(function()
+    return type(img.terminal) == "table"
+      and type(img.terminal.detect) == "function"
+      and type(img.terminal.env) == "function"
+      and type(img.supports_file) == "function"
+      and type(img.placement) == "table"
+      and type(img.placement.new) == "function"
+      and type(img.placement.clean) == "function"
+  end)
+  if not ok_parts then return nil end
   return {
     detect = function(cb)
-      snacks.image.terminal.detect(function()
-        local supported = snacks.image.terminal.env().supported == true
-        cb(supported)
+      local ok = pcall(img.terminal.detect, function()
+        local ok_env, env = pcall(img.terminal.env)
+        cb(ok_env and type(env) == "table" and env.supported == true)
       end)
+      if not ok then cb(false) end
     end,
     supports_file = function(path)
-      return snacks.image.supports_file(path) == true
+      local ok, res = pcall(img.supports_file, path)
+      return ok and res == true
     end,
     attach = function(buf, path)
-      return snacks.image.buf._attach(buf, { src = path })
+      vim.bo[buf].filetype = "image"
+      vim.bo[buf].modifiable = false
+      vim.bo[buf].modified = false
+      vim.bo[buf].swapfile = false
+      local ok, placement = pcall(img.placement.new, buf, path, { conceal = true, auto_resize = true })
+      return ok and placement or nil
     end,
     clean = function(buf)
-      pcall(snacks.image.placement.clean, buf)
+      pcall(img.placement.clean, buf)
     end,
   }
 end
@@ -298,7 +316,12 @@ local function open_or_update(entry, layout, is_prompt)
       clean_graphics(entry)
       if expanded and renderer and renderer.attach then
         set_card_lines(entry, { "" })
-        entry.placement = renderer.attach(buf, item.path)
+        local placement = renderer.attach(buf, item.path)
+        if placement then
+          entry.placement = placement
+        else
+          set_card_lines(entry, { line })
+        end
       else
         set_card_lines(entry, { line })
       end
@@ -511,7 +534,7 @@ local function ensure_watchers()
         if not closed then return end
         for buf, entry in pairs(terms) do
           if entry.card_win == closed then
-            entry.card_win = nil
+            close_card_win(entry)
           else
             vim.schedule(function()
               if terms[buf] then render_terminal(buf) end
@@ -521,6 +544,8 @@ local function ensure_watchers()
         for buf, entry in pairs(prompts) do
           if entry.prompt_win == closed then
             M.clear_prompt(buf)
+          elseif entry.card_win == closed then
+            close_card_win(entry)
           end
         end
       end,
@@ -763,25 +788,15 @@ function M.attach_terminal_keys(buf)
     silent = true,
     desc = "Dismiss attached image preview",
   })
-  vim.keymap.set("n", ",p", function() M.toggle(buf) end, {
+  vim.keymap.set("n", "<localleader>p", function() M.toggle(buf) end, {
     buffer = buf,
     silent = true,
     desc = "Toggle attached image preview",
   })
-  vim.keymap.set("n", ",P", function() M.clear_terminal(buf) end, {
+  vim.keymap.set("n", "<localleader>d", function() M.clear_terminal(buf) end, {
     buffer = buf,
     silent = true,
     desc = "Dismiss attached image preview",
-  })
-  vim.keymap.set("n", "]i", function() M.cycle(buf, 1) end, {
-    buffer = buf,
-    silent = true,
-    desc = "Next attached image",
-  })
-  vim.keymap.set("n", "[i", function() M.cycle(buf, -1) end, {
-    buffer = buf,
-    silent = true,
-    desc = "Previous attached image",
   })
 end
 

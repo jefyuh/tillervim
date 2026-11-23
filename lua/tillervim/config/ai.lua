@@ -2,12 +2,12 @@
 -- local-plugin/agent-workbench.nvim/lua/agent_workbench/state.lua validates it and owns the live state; plugin specs wire it
 -- into the native terminals and CodeCompanion. Requiring this file only returns data.
 return {
-  plugin_dirs = {}, -- Local native plugin paths for Codex.
+  plugin_dirs = {}, -- Local plugin paths for native Codex and Antigravity terminals.
   -- Native is built in. Snacks and custom providers use the same lifecycle.
   terminal = { provider = "snacks" },
   native = {
     codex = { args = { "--no-alt-screen", "--yolo" }, wrap_tmux = true },
-    antigravity = { args = { "--settings", '{"altScreenMode":"always"}' } },
+    antigravity = { args = { "--settings", '{"altScreenMode":"always"}' }, wrap_tmux = true },
   },
   -- HTTP profile for inline edits and command prompts, not for new chats.
   -- "auto": the first provider API whose key is configured, else the first API.

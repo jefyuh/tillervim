@@ -7,7 +7,7 @@ local defaults = {
   panel = { width = 90 },
   terminal = { provider = "native" },
   native = { codex = { command = "codex", args = { "--no-alt-screen", "--yolo" }, wrap_tmux = true, teardown_ignore = DEFAULT_TEARDOWN_IGNORE },
-    antigravity = { command = "agy", args = { "--settings", '{"altScreenMode":"always"}' } }, kimi = { command = "kimi", args = {} },
+    antigravity = { command = "agy", args = { "--settings", '{"altScreenMode":"always"}' }, wrap_tmux = true }, kimi = { command = "kimi", args = {} },
     opencode = { command = "opencode", args = {} } },
   integrations = { companion = false, review = false },
   plugin_dirs = {},
@@ -56,6 +56,7 @@ function M.setup(opts)
   assert(type(value.key_profile) == "string" and value.key_profile ~= "", "agent_workbench.key_profile must be a profile name")
   assert(type(value.native.codex.wrap_tmux) == "boolean", "agent_workbench.native.codex.wrap_tmux must be boolean")
   assert(type(value.native.codex.teardown_ignore) == "string", "agent_workbench.native.codex.teardown_ignore must be a string")
+  assert(type(value.native.antigravity.wrap_tmux) == "boolean", "agent_workbench.native.antigravity.wrap_tmux must be boolean")
   assert(vim.islist(value.plugin_dirs), "agent_workbench.plugin_dirs must be an ordered list")
   for i, dir in ipairs(value.plugin_dirs) do assert(type(dir) == "string" and dir ~= "", "agent_workbench.plugin_dirs[" .. i .. "] must be a directory path") end
   assert(type(value.panel.width) == "number" and value.panel.width >= 1 and value.panel.width % 1 == 0,

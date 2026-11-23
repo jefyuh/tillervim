@@ -261,11 +261,12 @@ default)* in code, and *Show outline* — a list of the headings, no server
 needed — in markdown, help, checkhealth and man buffers, under its own
 `outline` heading.
 
-`gx` opens the nearest HTTP(S) URL or existing local file on the current line:
-URLs and binary media/document deliverables (`.mp4`, `.mov`, `.mp3`, `.pdf`,
-Office/iWork, archives) use the system viewer/player; source, text and image
-files open in Nvim (jumping to `:line`, `:line:col`, or `#Lline` when present,
-including `file://` URIs). From a terminal,
+`gx` opens the nearest HTTP(S) URL or existing local file on the current line
+(or Visual selection): URLs and binary media/document deliverables (`.mp4`,
+`.mov`, `.mp3`, `.pdf`, Office/iWork, archives) use the system viewer/player;
+source, text and image files open in Nvim (jumping to `:line`, `:line:col`,
+`:line-end`, or `#Lline` when present, including `file://` URIs and OSC 8
+`url` highlight extmarks). From a terminal,
 the file opens in an editor window in the current tab and the terminal stays
 visible. Absolute paths, `~/…`, and relative paths work; relative paths use the
 source file's directory, or the agent/Snacks terminal's recorded working directory.
@@ -982,20 +983,20 @@ no Claude-only Oil action exists. From CodeDiff, chat keys use its origin tab.
 `ai` uses Codex's `ctrl+g` and `$EDITOR` to edit the actual input draft in this
 Nvim. `<C-d>` returns it; cancel preserves the original. `<C-v>` stages an image
 for Codex's own attachment path after the editor closes and opens a companion
-`Snacks.image` thumbnail card beside the prompt (`<M-p>` / `,p` folds to a compact
-`[Image #N]` badge, `<M-n>` / `]i` / `[i` cycles multiple images). Inside any
-native agent terminal (`codex`, `agy`, `kimi`, `opencode`), `<C-v>` forwards the
-image paste to the CLI while showing the same non-focusable thumbnail and
-`[Image #N]` badge in the panel's top-right corner (`<M-p>` / `,p` folds,
-`<M-x>` / `,P` dismisses, and submitting with `<CR>` or cancelling with `<C-c>`
-clears it automatically). An editor request
+`Snacks.image` thumbnail card beside the prompt (`<M-p>` folds to a compact
+`[Image #N]` badge, `<M-n>` cycles multiple images). Inside any native agent
+terminal (`codex`, `agy`, `kimi`, `opencode`), `<C-v>` forwards the image paste
+to the CLI while showing the same non-focusable thumbnail and `[Image #N]` badge
+in the panel's top-right corner (`<M-p>` or Normal `,p` folds, `<M-n>` cycles,
+`<M-x>` or Normal `,d` dismisses, and submitting with `<CR>` or cancelling with
+`<C-c>` clears it automatically). An editor request
 from a different program has no agent owner and takes no agent seed or image.
 `ar` resumes, `aR` continues, `am` chooses a model. On a running session these
 focus it and type nothing, protecting drafts and approvals. `at`/`aT` read
 Codex JSONL transcripts independently of terminal scrollback.
 
 Select transports in personal `tillervim.json`. For custom providers, HTTP profiles, panel width, native argv or plugin paths, set `agent-workbench.nvim` options in personal `lua/plugins/`. `terminal.provider` may be `native`,
-`snacks` or a custom embedded adapter. tmux frame composition is independent (`opts.native.codex.wrap_tmux = false` disables it). Its runner/watchdog/teardown preserve startup
+`snacks` or a custom embedded adapter. tmux frame composition is independent (`opts.native.codex.wrap_tmux = false` or `opts.native.antigravity.wrap_tmux = false` disables it). Its runner/watchdog/teardown preserve startup
 errors, CJK and scrollback and clean owned descendants. No CLI config is written.
 
 `<Space>ae` uses HTTP API credits; `<Space>ax` / `:AI key` switches that profile
@@ -1008,9 +1009,10 @@ borrowed from a CLI variable. More detail: [AI keys](../README.md#everyday-keys)
 ### Local native plugins
 
 Set `opts.plugin_dirs` on the personal `agent-workbench.nvim` spec.
-Entries can be plugin directories or distribution roots with `codex/<plugin>`
-packages. Resolution happens at native Codex launch; nothing installs at startup or
-for CodeCompanion. Codex refreshes local snapshots through `plugin add` using
+Entries can be plugin directories or distribution roots with `codex/<plugin>` or
+`antigravity/<plugin>` packages. Each new native terminal resolves its own packages.
+Antigravity stages them with `agy plugin install` and loads the temporary workspace
+with `--add-dir`. Its installer reports any skipped Claude components. Codex refreshes local snapshots through `plugin add` using
 a disposable `CODEX_HOME` sharing only the real plugin cache. Marketplace and
 enabled overrides are invocation-local; global enablement/config stay intact.
 

@@ -530,6 +530,8 @@ local sections = {
     { "CodeDiff · panels/layout/conflicts", icon = "󰓡 ", color = "orange", keys = { "P", "B", "g", "z", "I" } },
     -- S/U/X: stage, unstage, discard, as the status explorer's file keys.
     { "Review · feedback/stage/discard", icon = "󰄹 ", color = "red", keys = { "C", "S", "U", "X" } },
+    { "Agent · image preview", icon = "󰋩 ", color = "cyan", buftype = "terminal",
+      keys = { "p", "d" } },
     { "Terminal · sessions", icon = "󰆍 ", color = "yellow", buftype = "terminal",
       keys = { "1", "2", "3", "4", "5", "6", "7", "8", "9" } },
   },

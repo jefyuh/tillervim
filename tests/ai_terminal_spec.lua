@@ -227,6 +227,36 @@ do
   local defaults = require("agent_workbench").options().native.antigravity
   t.eq(defaults.args, { "--settings", '{"altScreenMode":"always"}' },
     "Antigravity defaults to session-only altScreenMode to prevent inline cursor flicker")
+  t.eq(defaults.wrap_tmux, true,
+    "Antigravity defaults to wrap_tmux so DEC 2026 frames compose offscreen without libvterm PTY-chunk tearing")
+
+  if vim.fn.executable("tmux") == 1 then
+    local cli = require("agent_workbench.backend.cli")
+    local agy_cmd = cli._terminal_command("antigravity", { "agy", "--settings", '{"altScreenMode":"always"}' })
+    local agy_joined = table.concat(agy_cmd, " ")
+    local at = vim.fn.index(agy_cmd, runner)
+    t.ok(at >= 0 and agy_cmd[at + 2] == "agy", "Antigravity tmux wrapper runs agy through agent-run")
+    t.ok(agy_joined:find("antigravity-nvim-" .. vim.fn.getpid(), 1, true) ~= nil,
+      "Antigravity uses its own per-Nvim tmux socket")
+    t.ok(agy_joined:find("escape-time 0", 1, true) ~= nil
+      and agy_joined:find("extended-keys always", 1, true) ~= nil
+      and agy_joined:find("extended-keys-format csi-u", 1, true) ~= nil,
+      "Antigravity tmux wrapper preserves zero-delay Esc and CSI u modified Enter")
+    t.ok(agy_joined:find("bind-key -T root WheelUpPane copy-mode", 1, true) == nil,
+      "Antigravity altScreenMode leaves WheelUpPane unbound so mouse wheel reaches agy's own viewport")
+    t.ok(agy_joined:find("destroy-unattached off", 1, true) ~= nil and agy_cmd[#agy_cmd - 1] == "client-detached",
+      "Antigravity tmux wrapper installs the client-detached teardown hook")
+
+    local inline_cmd = table.concat(cli._terminal_command("antigravity", { "agy" }), " ")
+    t.ok(inline_cmd:find("bind-key -T root WheelUpPane copy-mode -e", 1, true) ~= nil,
+      "inline Antigravity (without altScreenMode) binds WheelUpPane to tmux copy-mode")
+
+    local restore = require("agent_workbench.options")._patch({ native = { antigravity = { wrap_tmux = false } } })
+    local unwrapped = cli._terminal_command("antigravity", { "agy", "--settings", '{"altScreenMode":"always"}' })
+    restore()
+    t.eq(unwrapped, { "agy", "--settings", '{"altScreenMode":"always"}' },
+      "native.antigravity.wrap_tmux = false bypasses the tmux wrapper")
+  end
 
   local prev = config.agents.antigravity
   config._set_providers({
@@ -253,6 +283,12 @@ do
   t.ok(not buffer_local("<LeftMouse>"), "Antigravity altscreen leaves mouse clicks to the TUI")
   t.ok(not buffer_local("<ScrollWheelDown>"), "Antigravity altscreen leaves wheel-down to the TUI")
 
+  local agy_wrapped = open_kind("antigravity", {
+    "tmux", "-L", "agy-spec-unused", "new-session", "agy", "--settings", '{"altScreenMode":"always"}',
+  })
+  t.ok(not buffer_local("<LeftMouse>"), "tmux-wrapped Antigravity altscreen leaves mouse clicks to tmux/TUI")
+  t.ok(buffer_local_n("<PageUp>"), "tmux-wrapped Antigravity forwards terminal-Normal PageUp into the pane")
+
   local agy_inline = open_kind("antigravity", { "agy" })
   t.ok(buffer_local("<LeftMouse>"), "inline Antigravity (args = {}) keeps the click guard")
   t.ok(buffer_local("<ScrollWheelDown>"), "inline Antigravity keeps the wheel-down bottom guard")
@@ -260,7 +296,7 @@ do
   local oc = open_kind("opencode", { "opencode" })
   t.ok(not buffer_local("<LeftMouse>"), "OpenCode leaves mouse clicks to its alternate-screen TUI")
 
-  for _, b in ipairs({ agy_alt, agy_inline, oc }) do
+  for _, b in ipairs({ agy_alt, agy_wrapped, agy_inline, oc }) do
     pcall(vim.fn.jobstop, vim.bo[b].channel)
     pcall(vim.api.nvim_buf_delete, b, { force = true })
   end

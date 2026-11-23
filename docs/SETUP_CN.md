@@ -59,7 +59,7 @@
 
 如需独立 HTTP 聊天和 `<Space>ae` 行内编辑，在个人 `lua/plugins/` 的 `agent-workbench.nvim` `opts.providers` 中显式声明 `api` 项（`api_key` 支持 `"$VAR"`、字面量字符串或 `function() -> string|nil`）。
 
-`<Space>an` 新建并选择入口，`<Space>al` 切换，`<Space>ac` 收起或显示。每种 TUI 拥有独立 PTY，收起后进程继续运行。新 TUI 使用上游默认权限和账号，文件或选区作为草稿粘贴；Antigravity 默认通过会话级 `--settings '{"altScreenMode":"always"}'` 启用无闪烁全屏渲染与边界滚动。模型选择和历史由对应 CLI 交互界面处理。Kimi 支持启动时选会话，三种新增 TUI 均支持继续最近会话。原生 Codex 另有 tmux 渲染、提示词编辑器、逐轮快照和历史读取；其他 Agent 的集成式聊天审阅使用 ACP 入口。协议及启动命令见 [Antigravity](https://antigravity.google/docs/cli/acp)、[Kimi Code](https://moonshotai.github.io/kimi-code/en/reference/kimi-acp.html)、[OpenCode](https://opencode.ai/docs/cli/acp/)。
+`<Space>an` 新建并选择入口，`<Space>al` 切换，`<Space>ac` 收起或显示。每种 TUI 拥有独立 PTY，收起后进程继续运行。新 TUI 使用上游默认权限和账号，文件或选区作为草稿粘贴；Antigravity 默认通过会话级 `--settings '{"altScreenMode":"always"}'` 配合独立 `tmux` 帧合成器（`wrap_tmux = true`）实现无撕裂闪烁的全屏渲染与边界滚轮滚动。模型选择和历史由对应 CLI 交互界面处理。Kimi 支持启动时选会话，三种新增 TUI 均支持继续最近会话。原生 Codex 另有 tmux 渲染、提示词编辑器、逐轮快照和历史读取；其他 Agent 的集成式聊天审阅使用 ACP 入口。协议及启动命令见 [Antigravity](https://antigravity.google/docs/cli/acp)、[Kimi Code](https://moonshotai.github.io/kimi-code/en/reference/kimi-acp.html)、[OpenCode](https://opencode.ai/docs/cli/acp/)。
 
 ## 依赖、授权与降级
 

@@ -11,10 +11,29 @@ local function terminal_env()
   return env
 end
 
+local function alt_screen_always(argv)
+  return table.concat(argv, " "):find('"altScreenMode"%s*:%s*"always"') ~= nil
+end
+
+local function terminal_command(kind, argv, env)
+  local native = require("agent_workbench.options").get().native[kind]
+  if kind ~= "antigravity" or not native or native.wrap_tmux == false or vim.fn.executable("tmux") ~= 1 then
+    return argv
+  end
+  -- In session-only altScreenMode, agy enables mouse tracking (?1002h/?1006h)
+  -- and scrolls its own viewport, so tmux leaves WheelUpPane/PPage unbound to
+  -- pass wheel and page keys straight to agy while still composing DEC 2026
+  -- frames offscreen. Inline agy (args = {}) uses tmux copy-mode like Codex.
+  return launch.tmux_command("antigravity", argv, {
+    copy_mode_scroll = not alt_screen_always(argv),
+    env = env or terminal_env(),
+  })
+end
+M._terminal_command = terminal_command
+
 function M.new(kind)
   local backend, session = {}, nil
-  local config = require("agent_workbench.options").get()
-  local native = assert(config.native[kind])
+  assert(require("agent_workbench.options").get().native[kind])
   function backend.running() return terminals.alive(session) end
   function backend.buf() return backend.running() and session.buf or nil end
   function backend.window() return terminals.window(session) end
@@ -25,16 +44,28 @@ function M.new(kind)
   function backend.hide() return terminals.hide(session) end
   function backend.stop()
     if not session then return true end
+    launch.stop_tmux(session.buf, kind)
     local ok, err = terminals.stop(session)
     if ok then session = nil end
     return ok, err
   end
   local function open(extra)
     if not backend.running() then
+      local config = require("agent_workbench.options").get()
+      local native = assert(config.native[kind])
       local argv = vim.list_extend({ native.command }, native.args)
+      if kind == "antigravity" then
+        vim.list_extend(argv, require("agent_workbench.plugins").antigravity_args(native.command))
+      end
       vim.list_extend(argv, extra or {})
+      local env = terminal_env()
       local root = require("agent_workbench.context").project_root(vim.api.nvim_buf_get_name(0))
-      session = terminals.open(kind, { argv = argv, cwd = root, env = terminal_env(), width = config.panel.width })
+      session = terminals.open(kind, {
+        argv = terminal_command(kind, argv, env),
+        cwd = root,
+        env = env,
+        width = config.panel.width,
+      })
     end
     local win = backend.window()
     for _, candidate in ipairs(vim.api.nvim_tabpage_list_wins(0)) do

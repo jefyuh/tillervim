@@ -106,6 +106,9 @@ do
   t.ok(vim.fn.maparg("<C-v>", "t", false, true).buffer == 1, "<C-v> is buffer-local on agent terminal")
   t.ok(vim.fn.maparg("<M-p>", "t", false, true).buffer == 1, "<M-p> is buffer-local in Terminal-mode")
   t.ok(vim.fn.maparg(",p", "n", false, true).buffer == 1, ",p is buffer-local in Normal mode")
+  t.ok(vim.fn.maparg(",d", "n", false, true).buffer == 1, ",d is buffer-local in Normal mode")
+  t.ok(vim.fn.maparg(",P", "n", false, true).buffer ~= 1, ",P is not mapped on agent terminal (no CodeDiff collision)")
+  t.ok(vim.fn.maparg("[i", "n", false, true).buffer ~= 1, "[i stays global indent-change motion")
 
   saved_files = {}
   preview.paste_terminal(buf)
@@ -172,9 +175,29 @@ do
   t.ok((title_of(s2.win) or ""):find("[Image #2] (2/2)", 1, true) ~= nil, "card title shows [Image #2] (2/2)")
   t.ok((footer_of(s2.win) or ""):find("<M-n>", 1, true) ~= nil, "multi-image footer advertises <M-n> cycling")
 
-  t.eq(preview.cycle(buf, 1), true, "<M-n> / ]i cycles back to Image #1")
+  t.eq(preview.cycle(buf, 1), true, "<M-n> cycles back to Image #1")
   t.ok((title_of(preview._inspect(buf).win) or ""):find("[Image #1] (1/2)", 1, true) ~= nil,
     "cycling wraps to [Image #1] (1/2)")
+
+  -- Which-key classifies `,p` and `,d` under `Agent · image preview` in agent terminals.
+  require("lazy").load({ plugins = { "which-key.nvim" } })
+  vim.api.nvim_exec_autocmds("VimEnter", { modeline = false })
+  vim.wait(500, function() return require("which-key.config").loaded end)
+  do
+    vim.api.nvim_set_current_win(panel_win)
+    local wk_mode = require("which-key.buf").get({ mode = "n", update = true })
+    local comma = wk_mode.tree:find(",")
+    local View = require("which-key.view")
+    local rows, cur, under = {}, nil, {}
+    for _, child in ipairs(comma:children()) do rows[#rows + 1] = View.item(child, { parent = comma }) end
+    View.sort(rows)
+    for _, r in ipairs(rows) do
+      if r.key == "" then cur = r.desc:gsub("^── ", "") else under[r.keys] = cur end
+    end
+    t.eq({ under[",p"], under[",d"] }, { "Agent · image preview", "Agent · image preview" },
+      ",p and ,d sit under Agent · image preview in agent terminals")
+    t.ok(under[",P"] == nil, "no ,P CodeDiff collision in agent terminals")
+  end
 
   -- `<M-p>` / `,p` folds to a 1-row pill without dropping pending attachments, then expands back.
   t.eq(preview.toggle(buf), true, "<M-p> folds the card")
@@ -299,6 +322,9 @@ do
   t.ok(editor.is_prompt_win(pwin), "focused window is the prompt float")
 
   vim.cmd.stopinsert()
+  t.ok(vim.fn.maparg("<M-p>", "n", false, true).buffer == 1, "<M-p> is buffer-local on prompt float")
+  t.ok(vim.fn.maparg("<M-n>", "i", false, true).buffer == 1, "<M-n> is buffer-local in Insert mode on prompt float")
+  t.ok(vim.fn.maparg("[i", "n", false, true).buffer ~= 1, "prompt float preserves Markdown [i indent motion")
   vim.fn.maparg("<C-v>", "n", false, true).callback()
   local ps = preview._inspect(pbuf)
   t.ok(ps ~= nil and ps.win ~= nil and vim.api.nvim_win_is_valid(ps.win),
@@ -308,10 +334,22 @@ do
     "prompt winbar reveals <M-p> preview hint once an image is staged")
   local staged_path = ps.paths[1]
 
+  -- Second <C-v> adds <M-n> next hint in winbar; external close of companion float cleans graphics.
+  vim.fn.maparg("<C-v>", "n", false, true).callback()
+  t.ok((vim.wo[pwin].winbar or ""):find("<M-n> next", 1, true) ~= nil,
+    "prompt winbar reveals <M-n> next hint when multiple images are staged")
+  local staged_paths = vim.deepcopy(preview._inspect(pbuf).paths)
+  local before_clean = cleaned_bufs
+  vim.api.nvim_win_close(preview._inspect(pbuf).win, true)
+  vim.wait(80, function() return preview._inspect(pbuf).win == nil end, 10)
+  t.ok(cleaned_bufs > before_clean, "external close of preview float cleans graphics placement")
+
   vim.api.nvim_feedkeys(vim.keycode("<C-c>"), "x", false)
   vim.wait(200, function() return preview._inspect(pbuf) == nil end, 10)
   t.eq(preview._inspect(pbuf), nil, "cancelling prompt closes companion preview float")
-  t.eq(vim.fn.filereadable(staged_path), 0, "cancelling prompt deletes staged PNG")
+  for _, sp in ipairs(staged_paths) do
+    t.eq(vim.fn.filereadable(sp), 0, "cancelling prompt deletes staged PNG: " .. sp)
+  end
 
   -- Return (`<C-d>`) hands staged PNGs to `attach_images`, which transfers them
   -- into the live Codex TUI panel's preview card until submitted!
@@ -340,6 +378,30 @@ do
 
   cleanup_codex()
   editor._release = real_release
+end
+
+---------------------------------------------------------------------------
+-- 6. Real `Snacks.image` boundary: pcall-guarded fallback when placement raises
+---------------------------------------------------------------------------
+do
+  preview._renderer = {
+    detect = function(cb) cb(true) end,
+    supports_file = function() return true end,
+    attach = function() return nil end,
+    clean = function() end,
+  }
+  local buf, _, chan = open_agent_panel("codex")
+  has_image = true
+  preview.paste_terminal(buf)
+  local st = preview._inspect(buf)
+  t.ok(st ~= nil and st.win ~= nil, "failed renderer.attach still opens the preview float")
+  local fallback_line = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(st.win), 0, 1, false)[1] or ""
+  t.ok(fallback_line:find("[Image #1]", 1, true) ~= nil,
+    "failed renderer.attach degrades cleanly to the [Image #1] badge text")
+  preview.clear_terminal(buf)
+  pcall(vim.fn.jobstop, chan)
+  pcall(vim.api.nvim_buf_delete, buf, { force = true })
+  vim.cmd("silent! only")
 end
 
 -- Restore global test seams.

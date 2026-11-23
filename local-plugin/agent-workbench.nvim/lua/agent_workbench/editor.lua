@@ -224,6 +224,7 @@ end
 local IMAGE_NS = vim.api.nvim_create_namespace("ai_editor_images")
 local BASE_WINBAR = "  <C-d> return to agent   ·   <C-v> image   ·   <C-c> cancel   ·   also ZZ / :wq"
 local IMAGE_WINBAR = BASE_WINBAR .. "   ·   <M-p> preview"
+local MULTI_IMAGE_WINBAR = IMAGE_WINBAR .. "   ·   <M-n> next"
 
 ---@param buf integer
 ---@param images string[]
@@ -232,7 +233,7 @@ local function show_staged(buf, images, win)
   if not vim.api.nvim_buf_is_valid(buf) then return end
   vim.api.nvim_buf_clear_namespace(buf, IMAGE_NS, 0, -1)
   if win and vim.api.nvim_win_is_valid(win) then
-    vim.wo[win].winbar = #images > 0 and IMAGE_WINBAR or BASE_WINBAR
+    vim.wo[win].winbar = #images > 1 and MULTI_IMAGE_WINBAR or (#images == 1 and IMAGE_WINBAR or BASE_WINBAR)
   end
   if #images == 0 then return end
 
@@ -428,15 +429,6 @@ local function present(path, sentinel, slot)
   vim.keymap.set({ "n", "i" }, "<M-n>", function()
     require("agent_workbench.image_preview").cycle(buf, 1)
   end, { buffer = buf, desc = "Next staged image", silent = true })
-  vim.keymap.set("n", ",p", function()
-    require("agent_workbench.image_preview").toggle(buf)
-  end, { buffer = buf, desc = "Toggle staged image preview", silent = true })
-  vim.keymap.set("n", "]i", function()
-    require("agent_workbench.image_preview").cycle(buf, 1)
-  end, { buffer = buf, desc = "Next staged image", silent = true })
-  vim.keymap.set("n", "[i", function()
-    require("agent_workbench.image_preview").cycle(buf, -1)
-  end, { buffer = buf, desc = "Previous staged image", silent = true })
 
   -- Centred and bounded rather than full-width: a prompt is read as a block,
   -- and the terminal underneath stays visible around it.

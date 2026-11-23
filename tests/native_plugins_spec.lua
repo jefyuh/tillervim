@@ -33,8 +33,13 @@ local bundle, compat = root .. "/bundle", root .. "/compatible"
 fixture(bundle .. "/claude/demo", "claude", "demo")
 fixture(bundle .. "/codex/demo", "codex", "demo")
 fixture(compat, "claude", "compatible")
+local agy_package = bundle .. "/antigravity/demo"
+write(agy_package .. "/plugin.json", { name = "demo", version = "1.0.0", description = "Offline fixture" })
+write(agy_package .. "/skills/example/SKILL.md", "---\nname: example\ndescription: Example skill\n---\nExample.")
+
 
 set_dirs({})
+t.eq(plugins.antigravity_args("unused"), {}, "empty dirs do not run the agy installer")
 t.eq(plugins.claude_args(), {}, "unset/empty plugin dirs leave Claude unchanged")
 t.eq(plugins.codex_args(), {}, "empty plugin dirs need no Codex installation")
 set_dirs({ " ", " " .. bundle .. " ", "", compat, compat .. "/" })
@@ -46,6 +51,19 @@ t.eq(plugins.resolve("codex"), {
 }, "Codex selects its own package and accepts a Claude-compatible plugin")
 t.eq(plugins.claude_args(), { "--plugin-dir", bundle .. "/claude/demo", "--plugin-dir", compat },
   "Claude receives repeated plugin flags without premature shell escaping")
+t.eq(plugins.resolve("antigravity"), {
+  { name = "demo", path = agy_package }, { name = "compatible", path = compat },
+}, "Antigravity selects its own package and a directly configured Claude plugin")
+if vim.fn.executable("agy") == 1 then
+  local args = plugins.antigravity_args("agy")
+  t.eq(args[1], "--add-dir", "Antigravity receives the plugin workspace")
+  for _, name in ipairs({ "demo", "compatible" }) do
+    local path = args[2] .. "/.agents/plugins/" .. name
+    local result = vim.system({ "agy", "plugin", "validate", path, "--json" }, { text = true }):wait()
+    t.ok(result.code == 0 and vim.json.decode(result.stdout).components.skills == 1,
+      "agy validates the staged " .. name .. " skill without launching an agent")
+  end
+end
 local dirs = { bundle, compat }
 set_dirs({ root .. "/missing" })
 local ok, err = pcall(plugins.resolve, "codex")

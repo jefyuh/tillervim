@@ -67,7 +67,7 @@ end
 -- goes once the server and the agent's leftover process tree are gone.
 local watchdog_started = {}
 
----@param agent "claude"|"codex"
+---@param agent "claude"|"codex"|"antigravity"
 function M.ensure_watchdog(agent)
   if watchdog_started[agent] then return end
   watchdog_started[agent] = true
@@ -94,6 +94,98 @@ function M.ensure_watchdog(agent)
   ]], prefix, prefix, prefix, teardown, pid, teardown, socket, socket, socket, socket)
   -- detach calls setsid, surviving the SIGHUP cascade through Nvim's group.
   vim.fn.jobstart({ "sh", "-c", script }, { detach = true })
+end
+
+---Compose a dedicated per-agent tmux wrapper argv around `args`.
+---
+---Neovim's libvterm only suppresses buffer-line copy during DEC Mode 2026
+---synchronized updates while mutating cell attributes, cursor state and OSC 2
+---titles per 1024-byte PTY chunk, tearing multi-kilobyte TUI frames (Codex,
+---Antigravity). tmux buffers the full ?2026h...?2026l frame offscreen and emits
+---only the net diff to :terminal.
+---@param agent "claude"|"codex"|"antigravity"
+---@param args string[]
+---@param opts? { copy_mode_scroll?: boolean, env?: table<string, string> }
+---@return string[]
+function M.tmux_command(agent, args, opts)
+  M.ensure_watchdog(agent)
+  local raw_term = vim.env.TERM
+  local term = (raw_term and raw_term ~= "" and raw_term ~= "dumb") and raw_term or "xterm-256color"
+  local socket = agent .. "-nvim-" .. vim.fn.getpid()
+  local env = M.editor_env()
+  local command = {
+    "env", "TERM=" .. term,
+    "tmux", "-f", "/dev/null", "-L", socket,
+    "set-option", "-s", "escape-time", "0",
+    ";", "set-option", "-g", "default-terminal", term,
+    ";", "set-option", "-g", "history-limit", "50000",
+    ";", "set-option", "-g", "mouse", "on",
+    -- Keep mouse scrolling, but suppress tmux's pane menu on right-click.
+    ";", "unbind-key", "-T", "root", "MouseDown3Pane",
+    ";", "unbind-key", "-T", "root", "M-MouseDown3Pane",
+    -- <S-CR> reaches this pane as CSI u (ESC[13;2u) from editor_core/keymaps.lua.
+    -- `always` + `csi-u` preserves modified Enter for both crossterm (Codex) and
+    -- Bubble Tea (Antigravity) instead of collapsing it to a bare submit CR.
+    ";", "set-option", "-g", "extended-keys", "always",
+    ";", "set-option", "-g", "extended-keys-format", "csi-u",
+  }
+  -- Inline TUIs (--no-alt-screen) rely on tmux copy-mode for scrollback, whereas
+  -- alternate-screen TUIs that own mouse tracking (Antigravity altScreenMode)
+  -- scroll their own viewport when WheelUpPane/PPage are left unbound here.
+  if not opts or opts.copy_mode_scroll ~= false then
+    vim.list_extend(command, {
+      ";", "bind-key", "-T", "root", "WheelUpPane", "copy-mode", "-e",
+      ";", "bind-key", "-T", "root", "PPage", "copy-mode", "-eu",
+    })
+  end
+  vim.list_extend(command, {
+    ";", "bind-key", "-T", "copy-mode", "WheelUpPane", "send-keys", "-X", "-N", "2", "scroll-up",
+    ";", "bind-key", "-T", "copy-mode", "WheelDownPane", "send-keys", "-X", "-N", "2", "scroll-down",
+    ";", "bind-key", "-T", "copy-mode-vi", "WheelUpPane", "send-keys", "-X", "-N", "2", "scroll-up",
+    ";", "bind-key", "-T", "copy-mode-vi", "WheelDownPane", "send-keys", "-X", "-N", "2", "scroll-down",
+    ";", "new-session", "-A", "-s", "main",
+    -- tmux only puts into the pane what is whitelisted here; $NVIM must be
+    -- spelled out from v:servername because jobstart runs without a shell.
+    "-e", "EDITOR=" .. env.EDITOR,
+    "-e", "VISUAL=" .. env.VISUAL,
+    "-e", "NVIM=" .. vim.v.servername,
+  })
+  if opts and opts.env and opts.env.TERM_PROGRAM and opts.env.TERM_PROGRAM ~= "" then
+    vim.list_extend(command, { "-e", "TERM_PROGRAM=" .. opts.env.TERM_PROGRAM })
+  end
+  command[#command + 1] = M.runner()
+  vim.list_extend(command, args)
+  vim.list_extend(command, {
+    -- Off, deliberately: the client-detached hook below records the pane's
+    -- process tree before killing the server; exit-empty ends the server on a
+    -- clean agent exit.
+    ";", "set-option", "-g", "destroy-unattached", "off",
+    ";", "set-option", "-g", "exit-empty", "on",
+    ";", "set-option", "-g", "status", "off",
+    ";", "set-hook", "-g", "client-detached", M.teardown_hook(socket),
+  })
+  return command
+end
+
+---Synchronously tear down `buf`'s owned tmux wrapper server and socket, if any.
+---@param buf integer|nil
+---@param agent "claude"|"codex"|"antigravity"
+function M.stop_tmux(buf, agent)
+  local info = buf and vim.api.nvim_buf_is_valid(buf) and vim.b[buf].agent_workbench
+  local argv = info and info.cmd or {}
+  local socket = agent .. "-nvim-" .. vim.fn.getpid()
+  for i, arg in ipairs(argv) do
+    if arg == "-L" and argv[i + 1] == socket then
+      vim.system(M.teardown_argv(socket, true), { timeout = 5000 }):wait()
+      local tmp = (vim.env.TMUX_TMPDIR and vim.env.TMUX_TMPDIR ~= "") and vim.env.TMUX_TMPDIR or nil
+      local globs = tmp and { tmp .. "/tmux-*/" .. socket }
+        or { "/private/tmp/tmux-*/" .. socket, "/tmp/tmux-*/" .. socket }
+      for _, pat in ipairs(globs) do
+        for _, path in ipairs(vim.fn.glob(pat, false, true)) do vim.fn.delete(path) end
+      end
+      break
+    end
+  end
 end
 
 return M

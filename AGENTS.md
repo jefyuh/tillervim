@@ -98,7 +98,7 @@ Keep install, usage, configuration and troubleshooting instructions in the repos
 
 ## AI Provider Invariants
 
-- Native terminals support Codex, Antigravity (agy), Kimi Code and OpenCode. The latter three use direct PTYs with independent sessions and have no Codex hook, tmux renderer or transcript format. No claudecode.nvim dependency,
+- Native terminals support Codex, Antigravity (agy), Kimi Code and OpenCode. Codex and Antigravity compose their DEC 2026 TUI frames through per-agent tmux wrappers (`wrap_tmux = true`, keeping wheel passthrough for Antigravity's `altScreenMode`); Antigravity, Kimi Code and OpenCode use independent sessions and have no Codex hook or transcript format. No claudecode.nvim dependency,
   Claude backend, `:ClaudeCode`, `aa`/`ad` or Oil `aS` key exists. Native Claude
   IDE/proposal support is a later issue. Historical Claude transcript/label
   readers remain for old baselines; they do not enable a native backend.
@@ -179,7 +179,7 @@ Keep install, usage, configuration and troubleshooting instructions in the repos
   through /resume are distinct. Its separate code_review stays disabled,
   code_review context is not offered, and CodeCompanionCodeReview is deleted
   after setup and never a lazy trigger. There is one baseline system.
-- Preserve the Codex tmux renderer, watchdog, agent-run and agent-teardown;
+- Preserve the Codex and Antigravity tmux renderers, watchdog, agent-run and agent-teardown;
   validate flicker, resize/CJK, scrollback, resume, appended argv and cleanup.
   The watchdog starts on first native spawn, not startup. destroy-unattached
   stays off so client-detached can record/sweep the pane's process tree.
@@ -671,6 +671,7 @@ Keep install, usage, configuration and troubleshooting instructions in the repos
   edgebars in `edgy.config.layout` and `edgy.layout.update` (window sizing,
   above); `local-plugin/editor-core.nvim/lua/editor_core/diffsplit.lua` tells gitsigns' revision windows by
   their `gitsigns://` buffer names, which `tests/gitsigns_spec.lua` pins;
+  `local-plugin/agent-workbench.nvim/lua/agent_workbench/image_preview.lua` calls optional `Snacks.image` (`terminal.detect`, `terminal.env`, `supports_file`, `placement.new`, `placement.clean`) under `pcall` when a UI is attached and falls back to a plain 1-row badge;
   and `<leader>bP` calls `bufferline.groups.action` with a function -- the
   `group_action` bufferline documents but the pinned release does not
   export -- since `:BufferLineGroupClose` deletes with `force = true`

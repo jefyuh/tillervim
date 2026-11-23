@@ -238,8 +238,10 @@ local function candidate(ctx, row, start_cell, start, file, scheme_prefix)
   local url, spans, partials = "", {}, {}
   -- `wrapped`: the terminal wrapped the row just read, so the text resumes in
   -- column 0 of the next one. `tui_cont`: an aligned TUI cell continues the
-  -- target on the next row. `unwrapped`: soft-wrap (or file TUI wrap) happened.
-  local wrapped, tui_cont, unwrapped = false, nil, false
+  -- target on the next row. `soft_wrapped`: any terminal edge-wrap happened
+  -- (after which column continuation is disallowed). `tui_joined`: an unclosed
+  -- file or cut-scheme continuation across aligned TUI cells happened.
+  local wrapped, tui_cont, soft_wrapped, tui_joined = false, nil, false, false
   -- Rows down a table column count against max_lines, rows the terminal
   -- wrapped against max_wrapped: a long link stays whole.
   local column_rows, wrapped_rows = 0, 0
@@ -295,13 +297,14 @@ local function candidate(ctx, row, start_cell, start, file, scheme_prefix)
     -- goes on in column 0, bare or enclosed, whatever column it started in.
     wrapped = last == #ctx.lines[next_row] and wraps_at(ctx, next_row)
     tui_cont = nil
-    if not wrapped and #piece == #tail and not unwrapped then
+    if not wrapped and #piece == #tail and not soft_wrapped then
       if delimited or file or (scheme_prefix and next_row == row) then
         tui_cont = next_aligned_cell(ctx, row, start_cell, next_row, delimited)
       end
     end
-    unwrapped = unwrapped or wrapped or (file and tui_cont ~= nil)
-      or (scheme_prefix and next_row == row and tui_cont ~= nil)
+    soft_wrapped = soft_wrapped or wrapped
+    tui_joined = tui_joined or (file and tui_cont ~= nil)
+      or (scheme_prefix and not delimited and next_row == row and tui_cont ~= nil)
     -- Otherwise only an enclosed target continues, only down its aligned column
     -- and only once its closing delimiter is found.
     if not wrapped and not tui_cont then break end
@@ -310,7 +313,7 @@ local function candidate(ctx, row, start_cell, start, file, scheme_prefix)
   -- joined stands without a closing delimiter. A file path keeps its prefixes
   -- as fallbacks, for a newline written right after a valid path.
   -- Unwrapped, a bare target is its first row's piece, which fallback is.
-  if unwrapped then
+  if soft_wrapped or tui_joined then
     return { url = trim_url(url), spans = spans, partials = partials, fallback = fallback }
   end
   if file then fallback.partials = partials end

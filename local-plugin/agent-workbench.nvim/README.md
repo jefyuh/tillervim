@@ -27,7 +27,7 @@ when choosing Snacks. Missing selected providers fail; there is no automatic
 fallback. The terminal provider and tmux renderer are independent choices.
 External terminals without a Neovim PTY/buffer are not supported in this release.
 
-The additional native kinds use direct embedded PTYs, independent per-kind sessions, and their CLI defaults. Set `native.<kind>.command` and `native.<kind>.args` to override the launch command. Codex owns its tmux renderer, external editor and native review hooks. When a UI is attached, `<C-v>` in native agent panels and the prompt editor renders non-focusable `[Image #N]` thumbnail cards (via optional `Snacks.image` when present, or a compact badge fallback; `<M-p>` folds, `<M-n>` cycles, `<M-x>` clears). See the [transport matrix](../../docs/SETUP.md#terminal-and-chat-providers).
+The additional native kinds use independent per-kind sessions and their CLI defaults. Set `native.<kind>.command` and `native.<kind>.args` to override the launch command. Codex and Antigravity compose DEC 2026 TUI frames through dedicated `tmux` wrappers (`wrap_tmux = true`) when `tmux` is installed; Codex also owns its external editor and native review hooks. When a UI is attached, `<C-v>` in native agent panels and the prompt editor renders non-focusable `[Image #N]` thumbnail cards (via optional `Snacks.image` when present, or a compact badge fallback; `<M-p>` / Normal `<localleader>p` folds, `<M-n>` cycles, `<M-x>` / Normal `<localleader>d` dismisses). See the [transport matrix](../../docs/SETUP.md#terminal-and-chat-providers).
 
 ## Options and lifecycle
 
@@ -45,10 +45,11 @@ reconfigure. Session state and the selected HTTP profile are separate live state
 | `native.codex.args` | string list; `{ "--no-alt-screen", "--yolo" }` | Base argv, preserved for new/resume/continue. The host's existing execution policy is retained. |
 | `native.codex.wrap_tmux` | boolean; `true` | Frame composition/scrollback wrapper when tmux is installed. |
 | `native.codex.teardown_ignore` | string; shared daemon ERE | `awk` ERE of child daemon processes spared during tmux teardown. |
-| `native.antigravity.args` | string list; `{ "--settings", '{"altScreenMode":"always"}' }` | Session-only alternate-screen mode in `agy` for flicker-free rendering and native viewport scrolling. |
+| `native.antigravity.args` | string list; `{ "--settings", '{"altScreenMode":"always"}' }` | Session-only alternate-screen mode in `agy` for bounded viewport scrolling. |
+| `native.antigravity.wrap_tmux` | boolean; `true` | Offscreen DEC 2026 frame composition wrapper when `tmux` is installed (leaves mouse wheel passthrough intact in `altScreenMode`). |
 | `terminal.provider` | `"native"`, `"snacks"`, provider table; `"native"` | PTY/view owner. |
 | `panel.width` | positive integer; `90` | Native/chat panel width in columns. |
-| `plugin_dirs` | ordered string list; `{}` | Local native plugins for Codex. Installation happens only at native Codex launch, in a disposable CLI home sharing the plugin cache. |
+| `plugin_dirs` | ordered string list; `{}` | Local plugins for native Codex and Antigravity terminals, staged at launch. Codex shares its plugin cache. Antigravity uses a temporary plugin workspace. |
 | `integrations.companion` | boolean; `false` | Enable the optional CodeCompanion chat/inline integration. The host installs/configures CodeCompanion. |
 | `integrations.review` | boolean; `false` | Enable prompt hooks and review events. The host supplies git-review.nvim and CodeDiff. |
 | `key_profile` | string; `"auto"` | Startup HTTP profile (`"auto"` or a configured `api` profile name). |

@@ -21,6 +21,7 @@ servers, versions?) is filled by a native health provider: `:checkhealth tillerv
 | Formatting does nothing | `:ConformInfo` · then `:checkhealth conform` |
 | CodeCompanion chat refuses or fails | `:AI info` · `:checkhealth tillervim` · `<leader>mnh` (notification history) |
 | `<leader>an` lists no backend, or an AI key acts somewhere unexpected | `:AI info` (open chats and where they are) · `:checkhealth tillervim` (AI backends) · [AI and CodeCompanion](#ai-and-codecompanion) |
+| Native Antigravity plugin missing | Open `/plugin` in a new terminal and check `:messages` for conversion warnings. Validate a native package offline with `agy plugin validate <path>`. |
 | No grey AI suggestions | `:checkhealth tillervim` (inline completion) · `~/.local/state/nvim/llama/server.log` |
 | GitHub picker/status fails | `gh auth status` · `:checkhealth tillervim` · `<leader>mnh` (notification history) |
 | A diff view (`<leader>gv`, `gm`, `gk`, …) errors or never opens | `:checkhealth tillervim` (CodeDiff) · `:CodeDiff install!` · [Diff views](#diff-views-codediff) |
@@ -392,11 +393,14 @@ old fixture or document; Claude protocol support is a later extension.
 - **History/resume.** codecompanion-history stores local conversation text;
   resuming a stateful ACP session with /resume is separate. CodeCompanion's own
   code review is disabled so it cannot create a second baseline system.
-- **Rendering/scrolling/cleanup.** The Codex wrapper composes TUI synchronized
-  updates in tmux; `opts.native.codex.wrap_tmux = false` gives a direct comparison. Antigravity
-  defaults to session-only `--settings '{"altScreenMode":"always"}'` so its TUI
-  renders on the alternate screen without inline scrollback cursor jumps and
-  handles wheel scrolling within its own viewport; Normal-mode downward
+- **Rendering/scrolling/cleanup.** Codex and Antigravity compose TUI synchronized
+  updates (`?2026h`...`?2026l`) offscreen in dedicated per-agent `tmux` servers so
+  Neovim's `libvterm` never renders half-flushed 1024-byte PTY chunks;
+  `opts.native.codex.wrap_tmux = false` or `opts.native.antigravity.wrap_tmux = false`
+  gives a direct comparison. Antigravity also defaults to session-only
+  `--settings '{"altScreenMode":"always"}'` (leaving `tmux` root `WheelUpPane`
+  unbound) so its TUI renders on the alternate screen without inline scrollback
+  cursor jumps and handles mouse wheel scrolling within its own viewport; Normal-mode downward
   scrolling in `:terminal` windows is also clamped at the bottom row so
   buffers cannot scroll into empty `EndOfBuffer` space. Renderer and
   terminal provider are independent. Keep EDITOR/VISUAL/NVIM forwarding,
@@ -404,6 +408,15 @@ old fixture or document; Claude protocol support is a later extension.
   startup stays visible; stop/quitting cleans the owned server and descendants.
   A hide preserves the PTY. Follow exact buffer/session generation when debugging
   stale exit callbacks. Never kill shared daemons to clean a fixture.
+- **Image paste preview in native panels / prompt editor.** Embedded `:terminal`
+  buffers (`libvterm` plus Codex's inner `tmux`) strip raw Kitty Graphics
+  escapes emitted by child CLIs, and `agy` renders only a dim `N media attached`
+  header without an inline `[Image #1]` token. On macOS with a UI attached,
+  `<C-v>` snapshots `PNGf` or `TIFF` clipboard data to PNG and renders a
+  non-focusable float (`Snacks.image` Unicode placeholders when supported by the
+  host terminal, or a 1-row `[Image #N]` badge fallback; `<M-p>` / `,p` folds,
+  `<M-n>` cycles, `<M-x>` / `,d` dismisses in panels). Headless sessions skip
+  snapshotting and float creation while still forwarding `0x16` to the PTY.
 
 Public native APIs/provider lifecycle and a minimal host example are documented
 in [agent-workbench.nvim](../local-plugin/agent-workbench.nvim/README.md).
@@ -977,11 +990,13 @@ sourcemap mapping is derived from. Nothing else needs configuring; a hand-set
   the AI panel with `<leader>af`. To recover an affected layout first, leave
   terminal input with `jk` or `Ctrl-\`, then use `;f` to reopen your file in an
   editor window.
-- **`gx` cannot open a local report path in agent output** — existing file
-  references now open in Nvim (jumping to `:line`, `:line:col`, `:line-end`, or
+- **`gx` cannot open a local report path in agent output** — existing source,
+  text and image references open in Nvim (jumping to `:line`, `:line:col`, `:line-end`, or
   `#Lline` when present, including `file://` URIs and `url` highlight extmarks), reusing
-  an editor window in the current tab and preserving the terminal. Paths and
-  enclosed links can wrap across terminal rows, indented agent TUI blocks, TUI
+  an editor window in the current tab and preserving the terminal, while binary
+  media, document and archive deliverables (`.mp4`, `.mov`, `.mp3`, `.pdf`,
+  Office/iWork, archives) open externally via `vim.ui.open`. Paths and
+  enclosed links can wrap across up to 16 terminal rows, indented agent TUI blocks, TUI
   borders or scrollbars; press `Ctrl-\` or `jk`, then `gx` on any part (or
   select the range in Visual mode and press `gx`). Paths must exist on this
   machine; an incomplete path or a directory prefix alone is not opened.
@@ -998,7 +1013,7 @@ sourcemap mapping is derived from. Nothing else needs configuring; a hand-set
 
   `gx` and every multi-row yank from a terminal buffer now treat a full row
   followed by text in column 0 as one wrapped line
-  (`tillervim.util.terminal_text.soft_wraps`). That covers `yi(`, `V…y`, `v…$y`, any
+  (`editor_core.terminal_text.soft_wraps`). That covers `yi(`, `V…y`, `v…$y`, any
   register, the system clipboard and yanky's ring.
 
   These keep their newlines, because they fill a row on purpose:

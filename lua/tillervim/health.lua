@@ -80,7 +80,9 @@ function M.check()
   local consumers = { go = { "go" }, cargo = { "rust" }, dart = { "dart" }, flutter = { "dart" },
     python3 = { "python" }, node = { "typescript", "frontend", "yaml", "json", "bash", "python" } }
   for _, t in ipairs(vim.tbl_filter(function(tool)
-    if tool[1] == "tmux" then return vim.tbl_contains(selected.ai, "codex") end
+    if tool[1] == "tmux" then
+      return vim.tbl_contains(selected.ai, "codex") or vim.tbl_contains(selected.ai, "antigravity")
+    end
     return not consumers[tool[1]] or uses(consumers[tool[1]])
   end, executables)) do
     local exe, why, required = t[1], t[2], t[3]

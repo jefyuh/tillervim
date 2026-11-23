@@ -7,6 +7,7 @@ local function fail(message)
 end
 
 local manifests = {
+  antigravity = { ".antigravity-plugin/plugin.json", ".gemini-plugin/plugin.json", "plugin.json", ".claude-plugin/plugin.json" },
   claude = { ".claude-plugin/plugin.json" },
   codex = { "plugin.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json" },
 }
@@ -27,7 +28,7 @@ end
 
 ---Each entry is a plugin directory, or a distribution root with host/<plugin>
 ---children (e.g. GPK's dist/marketplace). Resolve only the requested host.
----@param host "claude"|"codex"
+---@param host "claude"|"codex"|"antigravity"
 ---@return { name: string, path: string }[]
 function M.resolve(host)
   assert(manifests[host], "unknown plugin host: " .. tostring(host))
@@ -78,6 +79,41 @@ function M.claude_args()
     vim.list_extend(args, { "--plugin-dir", plugin.path })
   end
   return args
+end
+
+---Agy discovers workspace plugins under .agents/plugins. Stage each launch
+---in Nvim's temporary directory so conversion and installation stay local to
+---the terminal. Only the plugin installer gets the disposable home.
+function M.antigravity_args(command)
+  local plugins = M.resolve("antigravity")
+  if #plugins == 0 then return {} end
+  local root = vim.fn.tempname()
+  local installer = root .. "/installer"
+  local workspace = root .. "/workspace"
+  local ok, err = pcall(function()
+    assert(vim.fn.mkdir(installer, "p") == 1)
+    assert(vim.fn.mkdir(workspace .. "/.agents", "p") == 1)
+    local installed = installer .. "/.gemini/config/plugins"
+    for _, plugin in ipairs(plugins) do
+      local result = vim.system({ command, "plugin", "install", plugin.path }, {
+        cwd = installer, env = { HOME = installer }, text = true, timeout = 15000,
+      }):wait()
+      local output = vim.trim((result.stdout or "") .. "\n" .. (result.stderr or ""))
+      if result.code ~= 0 or vim.fn.isdirectory(installed .. "/" .. plugin.name) ~= 1 then
+        fail("agy could not stage " .. plugin.path .. ": " .. output)
+      end
+      for line in output:gmatch("[^\r\n]+") do
+        if line:find("⚠", 1, true) then vim.notify("agy: " .. vim.trim(line), vim.log.levels.WARN) end
+      end
+    end
+    assert(vim.uv.fs_rename(installed, workspace .. "/.agents/plugins"))
+  end)
+  vim.fn.delete(installer, "rf")
+  if not ok then
+    vim.fn.delete(root, "rf")
+    error(err, 0)
+  end
+  return { "--add-dir", workspace }
 end
 
 -- JSON strings have the same escapes as TOML basic strings for filesystem paths.

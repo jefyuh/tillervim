@@ -135,11 +135,14 @@ the current tabpage, never another one.
 ### URLs and local files (`editor_core.url`)
 
 `open()` implements Normal- and Visual-mode `gx`: open the nearest HTTP(S) URL or existing
-local file on the current row (or the active Visual selection). URLs use `vim.ui.open`; file references use
-`:edit` (jumping to `:line`, `:line:col`, `:line-end`, or `#Lline` when present, including `file://` URIs and `url` highlight extmarks), focusing `tillervim.util.buffer.editor_target()` first so a chat or terminal
+local file on the current row (or the active Visual selection). URLs and binary
+media/document/archive deliverables (`.mp4`, `.mov`, `.mp3`, `.pdf`, Office/iWork,
+archives) use `vim.ui.open`; source, text and image file references use
+`:edit` (jumping to `:line`, `:line:col`, `:line-end`, or `#Lline` when present, including `file://` URIs and `url` highlight extmarks), focusing `editor_core.buffer.editor_target()` first so a chat or terminal
 panel remains intact. File candidates must exist and be regular files.
 Absolute and `~/` paths work; relative paths resolve beside an ordinary source
-file, against an agent or Snacks terminal's recorded `cwd`, or via `tillervim.util.cwd.buffer_dir()`
+file, against an agent or Snacks terminal's recorded `cwd`, or via the injected
+`opts.buffer_dir` callback (`tillervim.util.cwd.buffer_dir()` in the host)
 otherwise. Quotes and backticks support paths containing spaces, including
 consecutive spaces on one row. Filenames are passed literally to `:edit`, with
 filename expansion and command separators disabled. If no target is found,
@@ -1531,7 +1534,8 @@ differently.
 ## AI Clipboard (`agent_workbench.clipboard`)
 
 Moves clipboard images between the system, a staging file, and the agent TUI.
-macOS only — it shells out to `osascript`, for the Codex prompt editor.
+macOS only — it shells out to `osascript` (`PNGf` and `TIFF` clipboard classes,
+written as PNG) for the prompt editor and native agent panels.
 
 #### API Reference
 
@@ -1569,28 +1573,34 @@ interpolated into AppleScript source, which has no equivalent of `shellescape`.
 
 ## Native Agent Launch (`agent_workbench.backend.launch`)
 
-Codex owns the tmux renderer, external prompt editor and native review hook. The
-Antigravity, Kimi Code and OpenCode controllers use `agent_workbench.backend.cli`
-and the same terminal session registry. Their history and model menus belong to
-the CLI. Use an ACP chat for integrated round review with these providers.
+Codex and Antigravity compose their TUI frames through dedicated per-agent `tmux`
+wrappers (`launch.tmux_command` / `launch.stop_tmux`); Codex additionally owns the
+external prompt editor and native review hook. The Antigravity, Kimi Code and
+OpenCode controllers use `agent_workbench.backend.cli` and the same terminal
+session registry. Their history and model menus belong to the CLI. Use an ACP
+chat for integrated round review with these providers.
 
 
-Codex owns native command construction, tmux lifecycle and teardown. The
+`agent_workbench.backend.launch` owns shared tmux command construction, lifecycle
+and teardown. In Antigravity's default `altScreenMode`, `tmux_command` omits root
+`WheelUpPane`/`PPage` `copy-mode` bindings so mouse wheel and page keys pass
+directly to `agy`'s own alternate-screen viewport. The
 terminal provider owns only its PTY/view; no dependency on claudecode.nvim exists.
 Shared launch helpers are inert until a launch or explicit watchdog request.
 
 ```lua
 local launch = require("agent_workbench.backend.launch")
-launch.wrapper()              -- local-plugin/agent-workbench.nvim/scripts/agent-editor, the agents' $EDITOR
-launch.runner()               -- local-plugin/agent-workbench.nvim/scripts/agent-run, preserves startup errors
-launch.teardown()             -- local-plugin/agent-workbench.nvim/scripts/agent-teardown, cleans the process tree
-launch.teardown_hook(socket)  -- tmux client-detached command
-launch.editor_env()           -- EDITOR and VISUAL for the prompt handoff
-launch.enabled(env, global)   -- boolean preference: environment > vim.g > on
-launch.ensure_watchdog(agent) -- once per native agent; called by its backend
+launch.wrapper()                       -- local-plugin/agent-workbench.nvim/scripts/agent-editor, the agents' $EDITOR
+launch.runner()                        -- local-plugin/agent-workbench.nvim/scripts/agent-run, preserves startup errors
+launch.teardown()                      -- local-plugin/agent-workbench.nvim/scripts/agent-teardown, cleans the process tree
+launch.teardown_hook(socket)           -- tmux client-detached command
+launch.editor_env()                    -- EDITOR, VISUAL and NVIM for the prompt handoff
+launch.tmux_command(agent, args, opts) -- per-agent tmux frame compositor argv
+launch.stop_tmux(buf, agent)           -- synchronous server + descendant teardown
+launch.ensure_watchdog(agent)          -- once per native agent; called by its backend
 ```
 
-The watchdog starts at Codex's first wrapped spawn and only controls its own
+The watchdog starts at each wrapped agent's first spawn and only controls its own
 socket namespace/process descendants. The terminal provider may be native or
 Snacks independently of that renderer.
 
@@ -1708,13 +1718,14 @@ into the buffer — the prompt file is plain markdown, and only the CLI can put
 image bytes into its request. While staged, `agent_workbench.image_preview`
 renders a non-focusable companion thumbnail card alongside the prompt float via
 `Snacks.image` (falling back to a 1-row `[Image #N]` badge when terminal graphics
-are unavailable; `<M-p>` / `,p` toggles fold, `<M-n>` / `]i` / `[i` cycles). On return, the staged files are replayed through
+are unavailable; `<M-p>` toggles fold, `<M-n>` cycles). On return, the staged files are replayed through
 the TUI's own `ctrl+v` (`agent_workbench.attach_images`), the CLI writes its own
 `[Image #N]` marker, and `image_preview.adopt_terminal` transfers the preview card
 to the target panel until submitted. Direct `<C-v>` pastes inside native terminal
 panels (`codex`, `antigravity`, `kimi`, `opencode`) snapshot the clipboard PNG,
 forward `0x16` to the PTY, and display the same top-right thumbnail card and
-`[Image #N]` badge (`<M-p>` / `,p` fold, `<M-x>` / `,P` clear, auto-dismissed on
+`[Image #N]` badge (`<M-p>` / `<localleader>p` fold, `<M-n>` cycle,
+`<M-x>` / `<localleader>d` dismiss, auto-dismissed on
 `<CR>` / `<C-c>`). They go to the agent that owns the prompt, read from the
 temp path its CLI chose (`agent_workbench.state.agent_of_prompt`: current Codex
 uses `$CODEX_HOME/editor/*.md`), so a Codex prompt hands its images
@@ -1726,6 +1737,33 @@ The replay is deferred until after the buffer closes. Measured: while the prompt
 is open the agent is blocked on the editor and discards pty input, so a `ctrl+v`
 sent during the edit never arrives and the same one sent afterwards does. 100ms
 after close was still too early; 300ms landed.
+
+### Image preview cards (`agent_workbench.image_preview`)
+
+```lua
+local preview = require("agent_workbench.image_preview")
+
+preview.attach_terminal_keys(buf)            -- install buffer-local <C-v>, <M-p>/<M-n>/<M-x>, <localleader>p/d
+preview.paste_terminal(buf)                  -- snapshot clipboard PNG (when UI active) and send 0x16 to PTY
+preview.adopt_terminal(buf, paths)           --> boolean: adopt staged prompt PNGs onto `buf`'s panel card
+preview.clear_terminal(buf?)                 -- close panel card and delete owned temporary PNGs
+preview.set_prompt(prompt_win, buf, paths)   -- open/update companion card beside prompt float (editor owns files)
+preview.clear_prompt(buf?)                   -- close companion card without deleting editor-owned files
+preview.toggle(buf?)                         --> boolean: fold or expand the active card
+preview.cycle(buf?, step?)                   --> boolean: cycle through multiple staged/attached images
+preview.refresh_all()                        -- reconcile open cards against current window visibility/geometry
+preview.format_bytes(bytes)                  --> string ("512 B", "39 KB", "1.2 MB", or "")
+```
+
+Completely inert when no UI is attached (`#nvim_list_uis() == 0`): `paste_terminal`
+still forwards `0x16` to the child PTY without snapshotting or opening floats.
+Terminal cards anchor to the visible panel window (`relative = "win"`,
+`focusable = false`); hiding the panel closes the float while retaining pending
+items until re-shown, dismissed, or cleared by Terminal-mode `<CR>` / `<C-c>`
+(with Antigravity preserving the card across `@file` completion `<CR>` while
+`N media attached` remains visible). `Snacks.image` calls (`terminal.detect`,
+`terminal.env`, `supports_file`, `placement.new`, `placement.clean`) are optional
+and `pcall`-guarded, degrading cleanly to the 1-row `[Image #N]` badge.
 
 ### Reading the screen
 

@@ -239,6 +239,7 @@ function M.setup()
         vim.b[event.buf].ai_preserve_scrollback_once = nil
         return
       end
+      if owns_mouse(event.buf) then return end
       follow_live_output(event.buf)
     end,
     desc = "Return an AI tmux panel to live output when resuming input",

@@ -344,6 +344,26 @@ do
     t.eq(a.nvim_win_get_buf(term_win), term, "the terminal stays visible in its original window")
   end
 
+  -- File paths spanning three or more aligned rows (enclosed or indented) join
+  -- every row up to the closing delimiter / deepest existing file.
+  local deep_file = root .. "/nested/sub/three_row.md"
+  vim.fn.mkdir(vim.fs.dirname(deep_file), "p")
+  vim.fn.writefile({ "# Deep" }, deep_file)
+  local term3 = fixture({
+    "  (" .. root .. "/nested/",
+    "  sub/",
+    "  three_row.md)",
+    "    • " .. root .. "/nested/",
+    "      sub/",
+    "      three_row.md",
+  }, true)
+  local term3_win = a.nvim_get_current_win()
+  for _, r in ipairs({ 1, 2, 3, 4, 5, 6 }) do
+    a.nvim_set_current_win(term3_win)
+    check_file(r, 6, deep_file, "3-row wrapped terminal path opens whole from row " .. r)
+    t.eq(a.nvim_win_get_buf(term3_win), term3, "3-row wrapped path keeps terminal window intact")
+  end
+
   fixture({ '"' .. spaced .. '"' }, false)
   check_file(1, 4, spaced, "quoted file paths preserve spaces, Unicode and parentheses")
   for _, name in ipairs({ "report#draft.md", "report%done.md", "report$GX_FILE_TEST.md", "report  draft.md", "report|draft.md" }) do
@@ -502,7 +522,8 @@ do
     })
     t.ok(nh ~= nil, "native terminal provider starts")
     local pty = a.nvim_get_chan_info(vim.bo[nbuf].channel).pty
-    local stty = vim.system({ "sh", "-c", "stty -f " .. vim.fn.shellescape(pty) .. " size" }, { text = true }):wait()
+    local stty_flag = vim.uv.os_uname().sysname == "Darwin" and "-f" or "-F"
+    local stty = vim.system({ "stty", stty_flag, pty, "size" }, { text = true }):wait()
     t.eq(tonumber((stty.stdout or ""):match("%d+%s+(%d+)")), terminal.grid_width(nbuf),
       "native terminal PTY width matches grid_width from startup")
     native_prov.stop(nh)

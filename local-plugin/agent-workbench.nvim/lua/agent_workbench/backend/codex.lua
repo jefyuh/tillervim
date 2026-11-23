@@ -15,79 +15,7 @@ end
 
 local function terminal_command(args)
   if vim.fn.executable("tmux") ~= 1 or not should_wrap_tmux() then return args end
-
-  launch.ensure_watchdog("codex")
-  local term = vim.env.TERM or "xterm-256color"
-  local socket = "codex-nvim-" .. vim.fn.getpid()
-  local env = launch.editor_env()
-  local command = {
-    "env", "TERM=" .. term,
-    "tmux", "-f", "/dev/null", "-L", socket,
-    "set-option", "-g", "default-terminal", term,
-    ";", "set-option", "-g", "history-limit", "50000",
-    ";", "set-option", "-g", "mouse", "on",
-    -- Keep mouse scrolling, but suppress tmux's pane menu on right-click.
-    ";", "unbind-key", "-T", "root", "MouseDown3Pane",
-    ";", "unbind-key", "-T", "root", "M-MouseDown3Pane",
-    -- <S-CR> reaches this pane as CSI u (ESC[13;2u) from local-plugin/editor-core.nvim/lua/editor_core/keymaps.lua.
-    -- Under tmux's default `extended-keys off` that collapses to a bare CR,
-    -- which submits the message instead of inserting a newline (measured on
-    -- tmux 3.6b). `always` keeps the modifier without waiting for the pane to
-    -- ask -- Codex never requests modifyOtherKeys, and tmux ignores its kitty
-    -- request -- and `csi-u` matters because Codex (crossterm) does not parse
-    -- tmux's default xterm form ESC[27;2;13~. Every key with a legacy encoding
-    -- still reaches the pane byte-for-byte as before.
-    ";", "set-option", "-g", "extended-keys", "always",
-    ";", "set-option", "-g", "extended-keys-format", "csi-u",
-    -- These two are half of the scrollback story. The other half is the
-    -- terminal-Normal-mode forwarding in local-plugin/agent-workbench.nvim/lua/agent_workbench/terminal.lua, which sends
-    -- PPage into the pane so a scroll that starts outside terminal input still
-    -- lands in copy-mode instead of the near-empty :terminal buffer.
-    -- The wheel enters copy-mode without `-u`, which PPage keeps: `-u` scrolls
-    -- a full page on entry, so the first notch used to jump a whole screen. A
-    -- page is what PageUp means; it is not what one notch means. Once in
-    -- copy-mode, 2 lines per wheel event rather than tmux's default 5 --
-    -- Ghostty sends 3 events per discrete notch (mouse-scroll-multiplier), so
-    -- the default made one notch ~15 lines. Both copy-mode tables are bound
-    -- because which one is live depends on mode-keys, which tmux derives from
-    -- $EDITOR/$VISUAL in the server's own environment.
-    ";", "bind-key", "-T", "root", "WheelUpPane", "copy-mode", "-e",
-    ";", "bind-key", "-T", "root", "PPage", "copy-mode", "-eu",
-    ";", "bind-key", "-T", "copy-mode", "WheelUpPane", "send-keys", "-X", "-N", "2", "scroll-up",
-    ";", "bind-key", "-T", "copy-mode", "WheelDownPane", "send-keys", "-X", "-N", "2", "scroll-down",
-    ";", "bind-key", "-T", "copy-mode-vi", "WheelUpPane", "send-keys", "-X", "-N", "2", "scroll-up",
-    ";", "bind-key", "-T", "copy-mode-vi", "WheelDownPane", "send-keys", "-X", "-N", "2", "scroll-down",
-    ";", "new-session", "-A", "-s", "main",
-    -- tmux only puts into the pane what is whitelisted here; the pane does not
-    -- inherit this process's environment. $NVIM has to be spelled out from
-    -- v:servername because this list is handed to jobstart without a shell, so
-    -- there is nothing to expand `$NVIM` -- and the host nvim does not set
-    -- NVIM for itself anyway, only for its :terminal children.
-    "-e", "EDITOR=" .. env.EDITOR,
-    "-e", "VISUAL=" .. env.VISUAL,
-    "-e", "NVIM=" .. vim.v.servername,
-  }
-  -- The pane runs Codex through the launcher, not directly: the wrapper's own
-  -- teardown reports success to nvim whatever the pane's command did, so a
-  -- Codex that fails on startup would close the panel and take its error with
-  -- it. See local-plugin/agent-workbench.nvim/scripts/agent-run.
-  command[#command + 1] = launch.runner()
-  vim.list_extend(command, args)
-  vim.list_extend(command, {
-    -- Off, deliberately: the client-detached hook below is what ends this
-    -- server, and with destroy-unattached on the session -- and the pane's
-    -- process tree the hook has to record -- was gone before the hook ran
-    -- (measured). exit-empty still ends the server when Codex itself exits.
-    ";", "set-option", "-g", "destroy-unattached", "off",
-    ";", "set-option", "-g", "exit-empty", "on",
-    ";", "set-option", "-g", "status", "off",
-    -- When the nvim client goes away -- panel closed, nvim quit, host terminal
-    -- gone -- local-plugin/agent-workbench.nvim/scripts/agent-teardown kills the server and then the processes
-    -- Codex left behind in their own groups (exec_command sessions), which a
-    -- bare kill-server never reached. See ai.backend.launch.teardown_hook.
-    ";", "set-hook", "-g", "client-detached", launch.teardown_hook(socket),
-  })
-  return command
+  return launch.tmux_command("codex", args)
 end
 
 -- Indirection so a spec can inspect the wrapper without starting Codex. The
@@ -388,14 +316,7 @@ end
 ---Stop only this native session and its owned tmux process tree.
 function M.stop()
   if not current then return true end
-  local info = current.buf and vim.b[current.buf].agent_workbench
-  local argv = info and info.cmd or {}
-  for i, arg in ipairs(argv) do
-    if arg == "-L" and argv[i + 1] == "codex-nvim-" .. vim.fn.getpid() then
-      vim.system(launch.teardown_argv(argv[i + 1], true), { timeout = 5000 }):wait()
-      break
-    end
-  end
+  launch.stop_tmux(current.buf, "codex")
   local stopped, err = terminals.stop(current)
   if not stopped then return false, err end
   current = nil
