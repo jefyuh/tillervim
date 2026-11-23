@@ -69,7 +69,9 @@ function M.setup(opts)
       assert(type(value.terminal.provider[method]) == "function", "agent_workbench.terminal.provider missing " .. method)
     end
   end
-  fields(value.callbacks, { project_root = true, editor_win = true, origin_tab = true, notify_error = true }, "agent_workbench.callbacks")
+  fields(value.callbacks, {
+    project_root = true, editor_win = true, origin_tab = true, notify_error = true, toggle_zoom = true,
+  }, "agent_workbench.callbacks")
   for key, fn in pairs(value.callbacks) do assert(type(fn) == "function", "agent_workbench.callbacks." .. key .. " must be a function") end
   value.review = vim.tbl_deep_extend("force", vim.deepcopy(require("agent_workbench.review.defaults")), value.review or {})
   require("agent_workbench.review.settings").validate(value.review)

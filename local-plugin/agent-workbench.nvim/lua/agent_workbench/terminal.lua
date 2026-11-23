@@ -146,14 +146,12 @@ local function keep_terminal_mode_on_click(buf)
   })
 end
 
--- Claude and Codex both use a quick double Esc for their own "go back to the
--- previous message" action, and neither has ever received it here: Snacks maps
--- <esc> on its terminal buffers as a 200ms double-tap to Normal mode, and
--- local-plugin/editor-core.nvim/lua/editor_core/keymaps.lua maps <Esc><Esc> globally. The panels opt out of both --
--- Snacks' entry through `keys.term_normal = false` where each terminal is
--- created, the global pair through the mapping below, which is a complete
--- match and therefore wins over the longer global sequence without waiting out
--- 'timeoutlen'. `jk`, <C-]>, and <C-\> still leave Terminal-mode.
+-- Agent TUIs use a quick double Esc for their own "go back to the previous
+-- message" action. Snacks maps <esc> on its terminal buffers as a 200ms
+-- double-tap to Normal mode unless `keys.term_normal = false` is set, and a
+-- user config may also define an <Esc>-prefixed sequence. Mapping single <Esc>
+-- buffer-locally with `nowait` forwards it immediately without waiting out
+-- 'timeoutlen'. <C-\><C-n> (or any personal exit chord) leaves Terminal-mode.
 ---@param buf integer
 local function pass_esc_to_agent(buf)
   vim.keymap.set("t", "<Esc>", "<Esc>", {

@@ -68,7 +68,7 @@ the later ones are this configuration's own conventions.
 ### 1. A key's meaning depends on the mode
 
 You start in **Normal** mode: letters are commands, not text. `i` enters
-**Insert** mode to type; `jk` typed quickly (or `Esc`) brings you back. `v`
+**Insert** mode to type; `Esc` (or `<C-c>`) brings you back. `v`
 enters **Visual** mode to select. Every rule below is about Normal-mode keys.
 
 ### 2. One edit = verb + target
@@ -282,7 +282,7 @@ paragraph/bullet lines, TUI boxes or scrollbars, or separated by CJK punctuation
 (`（…、…）`). Visual `gx` joins a multi-line selection too. A link longer
 than the panel, which the terminal itself wrapped so its rest starts in column
 0 of the next row, opens whole as well, enclosed or bare. The cursor can be on
-any part. Leave terminal input with `Ctrl-\` or `jk` first.
+any part. Leave terminal input with `<C-\><C-n>` first.
 
 Yanking from a terminal buffer copies text the terminal wrapped as the one line
 the program printed, so `yi(` or `V` plus `y` on such a link puts the whole URL
@@ -432,8 +432,8 @@ and files are reached through the pickers above.
 `;F` and `;D` use the file's directory or the displayed Oil directory.
 From terminals and other panels, they use the current window/tab working directory.
 
-From a terminal (including Codex), leave terminal input with `Ctrl-\`
-or `jk`, then press `-` or `;o`. Oil opens with focus in the current tab's editor
+From a terminal (including Codex), leave terminal input with `<C-\><C-n>`,
+then press `-` or `;o`. Oil opens with focus in the current tab's editor
 area, creating an empty editor split if needed. `q` closes Oil and returns to
 the editor; the terminal stays open.
 
@@ -565,7 +565,7 @@ or a running session are available.
 | CodeDiff | Panels / layout | `,P` focus the explorer (the file panel) · `,B` show / hide it · `,z` compact mode (fold unchanged lines) · `,I` diff layout: inline / side by side |
 | CodeDiff | Conflicts | `,go` accept current (ours) · `,gt` incoming (theirs) · `,gb` keep base (drop both) · `,ga` both; uppercase final letters (`,gO`, `,gT`, `,gB`, `,gA`) apply to the whole file |
 | CodeDiff | Review | `,C` feedback on the hunk / selection / file · `,S` / `,U` stage / unstage the hunk · `,X` discard the hunk back to baseline |
-| Terminal | Sessions | `,1`–`,9` choose terminal 1–9 in Normal mode (`jk` first) |
+| Terminal | Sessions | `,1`–`,9` choose terminal 1–9 in Normal mode (`<C-\><C-n>` first) |
 
 CodeDiff is a view layered on a filetype: a Markdown diff keeps `,p`/`,m` and
 adds its own sections. `,z` and `,I` work in every window of every view, its
@@ -816,7 +816,7 @@ that referenced it get rewritten instead of silently breaking.
 `<Space>gf` opens the current file's history. Both open a focused floating
 terminal in input mode: `j`/`k` go straight to lazygit, even when typed quickly
 together, and `q` quits it. Lazygit has no Vim-style Normal/Insert modes;
-`Ctrl-]` deliberately leaves Neovim's terminal input mode, and `i` resumes it.
+`<C-\><C-n>` deliberately leaves Neovim's terminal input mode, and `i` resumes it.
 `;c` jumps to any changed hunk in the repository (see [Positions](#positions)).
 
 The diff views are CodeDiff's. Each opens in a tabpage of its own, with a file
@@ -965,7 +965,9 @@ were showing.
 Use `<C-/>` for numbered shell terminals and `<Space>an` for a new AI chat.
 `,1`–`,9` choose terminals in Normal mode; they never close one by repeating the
 number. `<Space>al` switches AI chats, `<Space>ac` hides/restores the last one,
-`<Space>af` focuses it, and `<Space>ai` composes in the selected terminal or chat.
+`<Space>af` focuses it, `<Space>az` (or `<C-.>` from Normal, Insert, or Terminal
+mode, paired beside `<C-,>`) toggles fullscreen zoom on the right AI chat and
+restores your prior window on exit, and `<Space>ai` composes in the selected terminal or chat.
 
 Native terminals include Codex, Antigravity, Kimi Code and OpenCode. Each also offers an optional ACP entry. OpenAI HTTP is selected separately. See the [transport matrix](SETUP.md#terminal-and-chat-providers). `<Space>an` shows transport and billing; a running native
 entry reuses the session. Showing one target hides the others in this tab only,

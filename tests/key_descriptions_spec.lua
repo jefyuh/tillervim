@@ -69,6 +69,8 @@ do
   t.eq({ under["<"], under[">"] }, { "move", "move" }, "the <leader>b popup puts < and > under move")
 end
 t.eq(desc("<C-,>", "t"), "Editor window (toggle back)", "terminal <C-,> is worded as se")
+t.eq(desc("<C-.>", "t"), "Toggle AI chat zoom", "terminal <C-.> is worded as <leader>az")
+t.eq(desc("<C-.>", "i"), "Toggle AI chat zoom", "insert <C-.> is worded as <leader>az")
 -- Read through :command, which prints the desc as given (see dap_actions_spec).
 local function command_desc(name)
   return vim.api.nvim_exec2("command " .. name, { output = true }).output
@@ -149,6 +151,8 @@ expect({
   ["<leader>al"] = "Switch AI chat…",
   ["<leader>ac"] = "Toggle AI chat",
   ["<leader>af"] = "Focus AI chat",
+  ["<leader>az"] = "Toggle AI chat zoom",
+  ["<C-.>"] = "Toggle AI chat zoom",
   ["<leader>ab"] = "Add file to AI chat",
   ["<leader>ai"] = "Compose prompt for AI chat",
   ["<leader>ar"] = "Resume native agent…",

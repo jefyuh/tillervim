@@ -95,6 +95,7 @@ end
 -- the last one back rather than ask.
 function M.toggle() return guard("AI chat", "toggle", function() slot().toggle() end) end
 function M.focus(id) if id then return M.show(id) end; return guard("AI chat", "focus", function() slot().focus() end) end
+function M.zoom() return guard("AI chat", "zoom", function() slot().zoom() end) end
 
 -- The keys only a native agent answers: the one on the right, else the one
 -- asked for. A running session is shown and left as it is -- each agent has

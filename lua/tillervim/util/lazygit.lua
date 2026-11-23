@@ -10,16 +10,6 @@ function M.open(file)
     interactive = true,
     win = {
       style = "float", width = 0.9, height = 0.9,
-      on_buf = function(win)
-        -- j must be immediate; an already-buffered jk must pass through too.
-        -- nowait alone cannot beat a complete global chord in the typeahead;
-        -- define j last so it is found before the local jk partial match.
-        for _, key in ipairs({ "jk", "j" }) do
-          vim.keymap.set("t", key, key, {
-            buffer = win.buf, nowait = true, desc = "Send " .. key .. " to Lazygit",
-          })
-        end
-      end,
     },
   })
 end

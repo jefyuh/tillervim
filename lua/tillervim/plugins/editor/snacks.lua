@@ -168,6 +168,11 @@ return {
     notifier = { enabled = #vim.api.nvim_list_uis() > 0 },
     indent = { enabled = true },
     scroll = { enabled = true },
+    terminal = {
+      win = {
+        keys = { term_normal = false },
+      },
+    },
     picker = {
       enabled = true,
       ui_select = true, -- replace vim.ui.select with snacks picker

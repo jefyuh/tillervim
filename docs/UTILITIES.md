@@ -331,14 +331,14 @@ The current text-entry source is not stored in an environment variable. It is
 queried with `macism` whenever Insert or terminal-input mode is left and kept in
 the Nvim process for the next restoration.
 
-`ensure_normal_source()` backs the Normal-mode `<C-\>` and `<C-]>` mappings. It
-queries the current source without changing modes, captures a non-default
-source, and switches to the Normal layout. The state machine records restoration
-ownership only after that switch succeeds, so the next Insert/terminal-input
-entry leaves the current source alone when the mapping closed nothing. Repeated
-requests are serialized and do not replace a pending CJK restoration with the
-already-active Normal layout. (`help` and `man` keep their buffer-local builtin
-`<C-]>`; `<C-\>` remains available there.)
+`ensure_normal_source()` is the helper for a personal Normal-mode escape mapping
+(for example `<C-\>` in `lua/config/keymaps.lua`). It queries the current source
+without changing modes, captures a non-default source, and switches to the
+Normal layout. The state machine records restoration ownership only after that
+switch succeeds, so the next Insert/terminal-input entry leaves the current
+source alone when the mapping closed nothing. Repeated requests are serialized
+and do not replace a pending CJK restoration with the already-active Normal
+layout.
 
 `opts.input_method.wait_time_ms` on `editor-core.nvim` is passed as macism's optional third argument on
 source switches. Leave it unset for macism's built-in wait (currently 150ms),
@@ -522,12 +522,12 @@ window.ensure_editor_win()
 -- tabpage -- every panel is winfix, so there is nothing to take space from.
 window.resize(dim, delta)
 
--- Give the current window the whole tabpage, and put the layout back.
--- Collapses edgy's bars first (their size and their views' thickness, both
--- remembered) because `wincmd _` alone is reverted when edgy re-applies its
--- geometry. Shrinks rather than hides: edgy's `hide` drops a non-pinned
--- window from its edgebar outright and only pinned views can be reopened.
-window.toggle_zoom()
+-- Give `target_win` (default: current window) the whole tabpage, and put the
+-- layout back on the next call. Collapses other edgy bars first and, when `win`
+-- itself belongs to an edgy bar, raises its window-local `edgy_width`/`edgy_height`
+-- so edgy holds it expanded across relayouts without affecting other tabpages.
+window.toggle_zoom(target_win?)
+window.is_zoomed(win?)
 
 -- `wincmd =`, then put every winfixwidth/winfixheight panel back to the size
 -- it was first seen at. Run in every tabpage on VimResized, by toggle_zoom
@@ -891,9 +891,8 @@ CodeDiff internals remain behind `git_review.view`.
 ## Lazygit (`tillervim.util.lazygit`)
 
 `require("tillervim.util.lazygit").open()` opens repository status; `open(file)` opens
-that file's history. The floating terminal preserves immediate `j` and `jk`
-input. `plugins/git/lazygit.lua` declares `<leader>gg` and `<leader>gf`;
-requiring the helper starts nothing.
+that file's history in an interactive floating terminal. `plugins/git/lazygit.lua`
+declares `<leader>gg` and `<leader>gf`; requiring the helper starts nothing.
 
 ## CodeDiff Views (`git_review.view`, `git_review.actions`)
 
@@ -1452,14 +1451,11 @@ no AI module. Snacks command fields are irrelevant to native identity.
 Three rules, the first two undoing something Nvim or Snacks does that is right
 for a shell and wrong for an agent TUI:
 
-`<Esc>` is mapped buffer-locally so it goes straight to the agent. Snacks maps
-`<esc>` on its terminal buffers as a 200ms double-tap to Normal mode, and
-`local-plugin/editor-core.nvim/lua/editor_core/keymaps.lua` maps `<Esc><Esc>` globally; between them, neither CLI ever
-received the quick double Esc that both read as "go back a message". The
-buffer-local single `<Esc>` is a complete match, so it wins over the longer
-global sequence without waiting out `timeoutlen`. Snacks' own entry is dropped
-where each terminal is created, via `keys.term_normal = false`. `jk` and `<C-\>`
-still leave Terminal-mode.
+`<Esc>` is mapped buffer-locally with `nowait` so it goes straight to the agent,
+including a quick double Esc ("go back a message") even if a personal config
+defines an `<Esc>`-prefixed sequence. Snacks' own 200ms `<esc>` double-tap is
+disabled via `keys.term_normal = false`. `<C-\><C-n>` (or any personal exit
+mapping) leaves Terminal-mode.
 
 Mouse clicks that land inside the panel are swallowed so Terminal-mode survives
 them. Nvim only forwards a mouse event to a terminal job that asked for mouse
