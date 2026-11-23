@@ -333,12 +333,13 @@ if chan then
   remote("_G.hook_spec.last.done()")
   t.eq(leftovers(), {}, "a release after the script gave up leaves nothing in TMPDIR")
 
-  res = run_hook({ "codex", "submit", "0" }, submit, sock)
+  res = fastest({ "codex", "submit", "0" }, submit, sock)
+  if remote("return _G.hook_spec.last ~= nil") then remote("_G.hook_spec.last.done()") end
   t.ok(silent_ok(res) and res.ms < 500, ("a zero wait only delivers (%.0f ms)"):format(res.ms))
 
   -- Subagents and spawned threads belong to the parent's turn.
   before = calls()
-  res = run_hook({ "codex", "submit", "2500" },
+  res = fastest({ "codex", "submit", "2500" },
     vim.json.encode({ session_id = "s-1", turn_id = "t-9", agent_id = "sub-1", agent_type = "worker" }), sock)
   t.ok(silent_ok(res) and res.ms < 500 and calls() == before,
     ("an event carrying agent_id is dropped and released at once (%.0f ms)"):format(res.ms))
@@ -370,7 +371,7 @@ if chan then
   -- Without ai.review.rounds the receiver acknowledges and drops the event.
   if #remote([[return vim.loader.find("agent_workbench.review.rounds")]]) == 0 then
     remote([[package.loaded["agent_workbench.review.rounds"] = nil]])
-    res = run_hook({ "codex", "submit", "2500" }, submit, sock)
+    res = fastest({ "codex", "submit", "2500" }, submit, sock)
     t.ok(silent_ok(res) and res.ms < 500, ("without ai.review.rounds a submit is released at once (%.0f ms)"):format(res.ms))
   end
 

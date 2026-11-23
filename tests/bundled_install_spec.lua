@@ -6,6 +6,15 @@ local managed, user = tmp .. "/plugins", tmp .. "/personal"
 local distro = managed .. "/tillervim"
 vim.fn.mkdir(managed, "p")
 assert(vim.system({ "cp", "-R", t.root, distro }, { text = true }):wait().code == 0)
+-- Simulate a real lazy.nvim clone on a branch even when the outer checkout is a
+-- detached PR head (GitHub Actions) or a linked worktree (.git file).
+vim.fn.delete(distro .. "/.git", "rf")
+assert(vim.system({ "git", "-C", distro, "init", "-q" }, { text = true }):wait().code == 0)
+assert(vim.system({ "git", "-C", distro, "symbolic-ref", "HEAD", "refs/heads/main" }, { text = true }):wait().code == 0)
+assert(vim.system({
+  "git", "-C", distro, "-c", "user.name=Spec", "-c", "user.email=spec@example.invalid",
+  "commit", "-q", "--allow-empty", "-m", "fixture",
+}, { text = true }):wait().code == 0)
 assert(vim.system({ "cp", "-R", t.root .. "/starter", user }, { text = true }):wait().code == 0)
 
 -- Reuse external dependencies offline, while putting the distribution and its
