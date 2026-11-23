@@ -213,23 +213,132 @@ local function restore_edgebars()
   require("edgy.layout").update()
 end
 
---- Give the current window the whole tabpage, and put the layout back.
+--- Give `target_win` (default: current window) the whole tabpage, and put the
+--- layout back on the next call.
 ---
---- `wincmd _` on its own was undone a tick later, for the same reason `:resize`
---- is: edgy's panels are winfix and it re-applies their geometry. Collapsing
---- the bars first is what leaves any space to take.
-function M.toggle_zoom()
-  local win = vim.api.nvim_get_current_win()
-  if vim.w[win].zoomed then
-    restore_edgebars()
-    M.equalize_respecting_fixed()
-    vim.w[win].zoomed = false
-    return
+--- `wincmd _` / `wincmd |` alone are undone a tick later when edgy owns panels
+--- in the tabpage, and are no-ops beside non-edgy `winfixwidth` splits. So:
+--- 1. Snapshot fixed-panel baseline sizes before changing geometry.
+--- 2. Collapse every other edgy edgebar; if `win` itself belongs to an edgebar,
+---    raise its window-local `edgy_width`/`edgy_height` to fill the tabpage so
+---    edgy's own relayout keeps it expanded without touching other tabpages.
+--- 3. Temporarily clear `winfixwidth`/`winfixheight` on sibling splits so plain
+---    splits yield space too, and auto-restore if `win` closes while zoomed.
+---@param target_win? integer
+---@return boolean zoomed true when `win` is now zoomed, false when restored
+local function zoomed_win_in_tab(tab)
+  for _, w in ipairs(vim.api.nvim_tabpage_list_wins(tab or 0)) do
+    if vim.api.nvim_win_is_valid(w) and vim.api.nvim_win_get_config(w).relative == "" and vim.w[w].zoomed then
+      return w
+    end
   end
+end
+
+local function restore_winfix(winfix)
+  for _, entry in ipairs(winfix or {}) do
+    if type(entry) == "table" and entry.win and vim.api.nvim_win_is_valid(entry.win) then
+      if entry.width ~= nil then vim.wo[entry.win].winfixwidth = entry.width end
+      if entry.height ~= nil then vim.wo[entry.win].winfixheight = entry.height end
+    end
+  end
+end
+
+local function unzoom_current_tab()
+  local z = zoomed_win_in_tab(0)
+  local state = vim.t.window_zoom
+  vim.t.window_zoom = nil
+  if z then
+    vim.w[z].zoomed = false
+    pcall(vim.api.nvim_del_augroup_by_name, "window_zoom_" .. z)
+  end
+  if state and state.win and vim.api.nvim_win_is_valid(state.win) then
+    vim.w[state.win].zoomed = false
+    pcall(vim.api.nvim_del_augroup_by_name, "window_zoom_" .. state.win)
+    if state.edgy_dim then vim.w[state.win][state.edgy_dim] = state.edgy_prev end
+  end
+  restore_winfix(state and state.winfix)
+  restore_edgebars()
+  M.equalize_respecting_fixed()
+end
+
+---@param win? integer
+---@return boolean
+function M.is_zoomed(win)
+  win = win or vim.api.nvim_get_current_win()
+  return vim.api.nvim_win_is_valid(win) and vim.w[win].zoomed == true
+end
+
+function M.toggle_zoom(target_win)
+  local win = target_win or vim.api.nvim_get_current_win()
+  if not vim.api.nvim_win_is_valid(win) then return false end
+  if vim.w[win].zoomed then
+    unzoom_current_tab()
+    return false
+  end
+  if zoomed_win_in_tab(0) or vim.t.window_zoom then
+    unzoom_current_tab()
+  end
+
+  -- Ensure a newly opened panel is registered in edgy before inspecting it, and
+  -- record fixed-panel target widths/heights while still at normal sizes.
+  if package.loaded["edgy"] and not edgy_win(win) then
+    require("edgy.layout").update()
+  end
+  get_fixed_panels()
+
+  local winfix = {}
+  for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if w ~= win and vim.api.nvim_win_is_valid(w) and vim.api.nvim_win_get_config(w).relative == "" then
+      if vim.wo[w].winfixwidth or vim.wo[w].winfixheight then
+        winfix[#winfix + 1] = { win = w, width = vim.wo[w].winfixwidth, height = vim.wo[w].winfixheight }
+        vim.wo[w].winfixwidth = false
+        vim.wo[w].winfixheight = false
+      end
+    end
+  end
+
   collapse_edgebars(win)
-  vim.cmd.wincmd("_")
-  vim.cmd.wincmd("|")
+  local ew = edgy_win(win)
+  local edgy_dim, edgy_prev
+  if ew then
+    local thickness = edgy_thickness(ew.view.edgebar)
+    edgy_dim = "edgy_" .. thickness
+    edgy_prev = vim.w[win][edgy_dim]
+    vim.w[win][edgy_dim] = thickness == "width" and vim.o.columns or vim.o.lines
+    require("edgy.layout").update()
+    vim.w[win][edgy_dim] = thickness == "width"
+      and vim.api.nvim_win_get_width(win)
+      or vim.api.nvim_win_get_height(win)
+    require("edgy.layout").update()
+  end
+
+  vim.api.nvim_win_call(win, function()
+    vim.cmd.wincmd("_")
+    vim.cmd.wincmd("|")
+  end)
   vim.w[win].zoomed = true
+  vim.t.window_zoom = { win = win, edgy_dim = edgy_dim, edgy_prev = edgy_prev, winfix = winfix }
+
+  local tab = vim.api.nvim_win_get_tabpage(win)
+  local group = vim.api.nvim_create_augroup("window_zoom_" .. win, { clear = true })
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = group,
+    pattern = tostring(win),
+    once = true,
+    callback = function()
+      vim.schedule(function()
+        if not vim.api.nvim_tabpage_is_valid(tab) or not vim.t[tab].window_zoom then return end
+        local wins = vim.api.nvim_tabpage_list_wins(tab)
+        for _, w in ipairs(wins) do
+          if vim.api.nvim_win_is_valid(w) and vim.api.nvim_win_get_config(w).relative == "" then
+            vim.api.nvim_win_call(w, unzoom_current_tab)
+            break
+          end
+        end
+      end)
+    end,
+  })
+  return true
 end
 
 --- Filetypes that occupy the editor area without holding a real file buffer.
@@ -459,10 +568,26 @@ end
 --- Runs wincmd = then restores fixed panels to their target sizes.
 --- Use on VimResized to redistribute editor space proportionally.
 function M.equalize_respecting_fixed()
+  local z = zoomed_win_in_tab(0)
+  if z then
+    local state = vim.t.window_zoom
+    if state and state.edgy_dim and package.loaded["edgy"] then
+      local is_width = state.edgy_dim == "edgy_width"
+      vim.w[z][state.edgy_dim] = is_width and vim.o.columns or vim.o.lines
+      require("edgy.layout").update()
+      vim.w[z][state.edgy_dim] = is_width and vim.api.nvim_win_get_width(z) or vim.api.nvim_win_get_height(z)
+      require("edgy.layout").update()
+    end
+    vim.api.nvim_win_call(z, function()
+      vim.cmd.wincmd("_")
+      vim.cmd.wincmd("|")
+    end)
+    return
+  end
   local panels = get_fixed_panels()
   vim.cmd("wincmd =")
   for _, entry in ipairs(panels) do
-    if vim.api.nvim_win_is_valid(entry.win) then
+    if vim.api.nvim_win_is_valid(entry.win) and not edgy_win(entry.win) then
       if entry.width then
         vim.api.nvim_win_set_width(entry.win, entry.width)
       end
@@ -470,6 +595,9 @@ function M.equalize_respecting_fixed()
         vim.api.nvim_win_set_height(entry.win, entry.height)
       end
     end
+  end
+  if package.loaded["edgy"] then
+    require("edgy.layout").update()
   end
 end
 

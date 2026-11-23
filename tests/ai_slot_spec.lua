@@ -1118,6 +1118,56 @@ t.ok(codex.visible() and not openai.ui:is_visible() and api.nvim_buf_is_valid(op
   "ai.feed hides the chat for the agent it feeds")
 require("agent_workbench.editor").stage_seed(nil, { agent = "codex" })
 
+-- <leader>az / <C-.> zooms the right AI chat and restores layout + focus.
+local saved_columns = vim.o.columns
+vim.o.columns = 180
+require("lazy").load({ plugins = { "edgy.nvim" } })
+require("edgy.layout").update()
+settle()
+editor()
+local ed_win = api.nvim_get_current_win()
+local panel_win = codex.window()
+local normal_panel_w = api.nvim_win_get_width(panel_win)
+ai.zoom()
+vim.cmd("stopinsert")
+settle()
+t.eq(api.nvim_get_current_win(), panel_win, "zoom from editor focuses the AI panel")
+t.ok(api.nvim_win_get_width(panel_win) > normal_panel_w + 40, "zoom expands the AI panel across the tabpage")
+ai.zoom()
+settle()
+t.eq(api.nvim_get_current_win(), ed_win, "unzoom returns focus to the origin editor window")
+t.eq(api.nvim_win_get_width(panel_win), normal_panel_w, "unzoom restores the AI panel's configured width")
+
+-- Pressing zoom from inside the AI panel keeps focus in the AI panel on unzoom.
+api.nvim_set_current_win(panel_win)
+ai.zoom()
+vim.cmd("stopinsert")
+settle()
+t.ok(api.nvim_win_get_width(panel_win) > normal_panel_w + 40, "zoom from inside the panel expands it")
+ai.zoom()
+vim.cmd("stopinsert")
+settle()
+t.eq(api.nvim_get_current_win(), panel_win, "unzoom keeps focus inside the panel when started there")
+t.eq(api.nvim_win_get_width(panel_win), normal_panel_w, "and restores panel width")
+
+-- With the AI panel hidden, zoom brings the last chat back and zooms it; hiding
+-- while zoomed cleans up the zoom state cleanly.
+editor()
+ai.toggle()
+settle()
+t.ok(not codex.visible(), "Codex panel is hidden before cold zoom")
+ai.zoom()
+vim.cmd("stopinsert")
+settle()
+local reopened_win = codex.window()
+t.ok(codex.visible() and api.nvim_win_get_width(reopened_win) > normal_panel_w + 40,
+  "zoom on an empty right edge restores the last chat and zooms it")
+ai.toggle()
+settle()
+t.ok(not codex.visible() and api.nvim_win_get_width(ed_win) > normal_panel_w + 40,
+  "hiding a zoomed chat restores the editor window to full width")
+vim.o.columns = saved_columns
+
 -- Cleanup
 ---------------------------------------------------------------------------
 

@@ -247,7 +247,7 @@ local function on_key(_, typed)
     or keys:find("Release", 1, true) or keys:find("^<Focus") then
     return
   end
-  -- Nor do this config's own Terminal-mode keys (jk, <C-\>, <C-h/j/k/l>, ...),
+  -- Nor do this config's own Terminal-mode keys (<C-h/j/k/l>, <C-,>, <C-.>, ...),
   -- or leaving the panel to review would mark every round's terminal dirty.
   if vim.fn.mapcheck(keys, "t") ~= "" then return end
   entry.dirty = true

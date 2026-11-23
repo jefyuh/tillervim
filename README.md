@@ -157,7 +157,7 @@ Do not edit the installed distribution's private `tillervim.config.*` modules.
 | `s` | Arrange windows |
 | `<leader>` | Global domains: AI, Git, debug, UI and sessions |
 | `<leader>an` / `al` | New / switch AI chat |
-| `<leader>ac` / `af` | Toggle / focus AI chat |
+| `<leader>ac` / `af` / `az` (`<C-.>`) | Toggle / focus / fullscreen-zoom AI chat |
 | `<leader>ar` / `aR` / `am` | Resume / continue / select native model |
 | `<leader>ab` / `as` / `ai` | Add file / selection / compose prompt |
 | `<leader>aV` / `av` | Start review round / review changes since baseline |

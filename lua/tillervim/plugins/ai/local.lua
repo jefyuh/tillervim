@@ -20,6 +20,8 @@ return {
     { "<leader>al", function() require("agent_workbench").switch_chat() end, mode = { "n", "x" }, desc = "Switch AI chat…" },
     { "<leader>ac", function() require("agent_workbench").toggle() end, mode = "n", desc = "Toggle AI chat" },
     { "<leader>af", function() require("agent_workbench").focus() end, mode = "n", desc = "Focus AI chat" },
+    { "<leader>az", function() require("agent_workbench").zoom() end, mode = "n", desc = "Toggle AI chat zoom" },
+    { "<C-.>", function() require("agent_workbench").zoom() end, mode = { "n", "i", "t" }, desc = "Toggle AI chat zoom" },
     { "<leader>ar", function() require("agent_workbench").resume() end, mode = "n", desc = "Resume native agent…" },
     { "<leader>aR", function() require("agent_workbench").continue() end, mode = "n", desc = "Continue native agent" },
     { "<leader>am", function() require("agent_workbench").select_model() end, mode = "n", desc = "Select native agent model…" },
@@ -68,6 +70,7 @@ return {
       editor_win = function() return require("editor_core.window").editor_win() end,
       origin_tab = function(tab) return require("editor_core.window").origin_tab(tab) end,
       notify_error = function(err) return require("editor_core.vim_error").notify(err) end,
+      toggle_zoom = function(win) return require("editor_core.window").toggle_zoom(win) end,
     }
     return opts
   end,

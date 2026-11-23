@@ -54,7 +54,7 @@ reconfigure. Session state and the selected HTTP profile are separate live state
 | `integrations.review` | boolean; `false` | Enable prompt hooks and review events. The host supplies git-review.nvim and CodeDiff. |
 | `key_profile` | string; `"auto"` | Startup HTTP profile (`"auto"` or a configured `api` profile name). |
 | `review` | table | Partial review policy; live `vim.g.ai_review` overrides it. See the host manual for every field. |
-| `callbacks` | optional function table | `project_root(path)`, `editor_win()`, `origin_tab(tab)`, `notify_error(error)`; native defaults require no private host module. |
+| `callbacks` | optional function table | `project_root(path)`, `editor_win()`, `origin_tab(tab)`, `notify_error(error)`, `toggle_zoom(win)`; native defaults require no private host module. |
 
 A provider's `acp = { adapter, command, auth_method? }` identifies a CLI bridge.
 `api = { adapter, api_key, name?, label?, model? }` identifies an HTTP profile;
@@ -101,7 +101,7 @@ return copied observations. A session contains `id`, `kind`, `generation`,
 plugin-owned metadata, independent of Snacks. `AgentWorkbenchSessionChanged`
 announces registry changes. `key.use(name)` / `key.info()` manage HTTP state.
 
-The host facade also supplies `new_chat`, `switch_chat`, `toggle`, `focus`,
+The host facade also supplies `new_chat`, `switch_chat`, `toggle`, `focus`, `zoom`,
 `add_buffer`, `send_selection`, `compose`, `resume`, `continue`, `select_model`,
 `transcript`, `transcript_pick`, `review`, and `new_round`. `:AI` opens the chat
 switcher; `:AI new`, `:AI info`, `:AI key [name]` and `:AIInfo` are its command

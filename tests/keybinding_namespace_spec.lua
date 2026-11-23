@@ -44,6 +44,8 @@ for lhs, modes in pairs({
   ["<leader>al"] = { n = true, x = true },
   ["<leader>ac"] = { n = true },
   ["<leader>af"] = { n = true },
+  ["<leader>az"] = { n = true },
+  ["<C-.>"] = { n = true, i = true, t = true },
   -- The prompt editor seeds from a Visual selection.
   ["<leader>ai"] = { n = true, x = true },
   -- CodeCompanion: inline edits take a Visual range; saved chats have nothing

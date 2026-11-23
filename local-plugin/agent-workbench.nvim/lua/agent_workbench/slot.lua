@@ -741,6 +741,81 @@ function M.focus()
   return into(shown, from)
 end
 
+local function refresh_image_previews()
+  local ip = package.loaded["agent_workbench.image_preview"]
+  if ip then ip.refresh_all() end
+end
+
+local function zoom_shown_item(item, origin_win, prev_mode)
+  local buf = M.buf_of(item)
+  local chat_win
+  for _, win in ipairs(api.nvim_tabpage_list_wins(0)) do
+    if buf and nonfloat(win) and api.nvim_win_get_buf(win) == buf then
+      chat_win = win
+      break
+    end
+  end
+  if not chat_win then return end
+  local normal_wins = vim.tbl_filter(nonfloat, api.nvim_tabpage_list_wins(0))
+  if #normal_wins <= 1 then
+    M.reveal(item)
+    return notify(("%s already fills this tab"):format(name(item)))
+  end
+  if origin_win and api.nvim_get_current_win() ~= chat_win then
+    M.reveal(item)
+  end
+  local zoomed = require("agent_workbench.context").toggle_zoom(chat_win)
+  refresh_image_previews()
+  vim.schedule(refresh_image_previews)
+  if zoomed then
+    vim.t.ai_zoom_origin = origin_win
+    if api.nvim_win_is_valid(chat_win) then
+      api.nvim_set_current_win(chat_win)
+      if item.kind == "native" and (origin_win ~= nil or prev_mode == "t") then
+        vim.cmd("startinsert")
+      end
+    end
+    return
+  end
+  local back = vim.t.ai_zoom_origin
+  vim.t.ai_zoom_origin = nil
+  if back and api.nvim_win_is_valid(back)
+    and api.nvim_win_get_tabpage(back) == api.nvim_get_current_tabpage()
+    and back ~= chat_win
+  then
+    if prev_mode == "i" or prev_mode == "t" then vim.cmd("stopinsert") end
+    api.nvim_set_current_win(back)
+  elseif api.nvim_win_is_valid(chat_win) then
+    api.nvim_set_current_win(chat_win)
+    if item.kind == "native" and prev_mode == "t" then vim.cmd("startinsert") end
+  end
+end
+
+---<leader>az / <C-.>: toggle fullscreen zoom on the right AI chat in this
+---tabpage, or bring the last chat back and zoom it when none is shown.
+function M.zoom()
+  local cur_win = api.nvim_get_current_win()
+  local prev_mode = vim.fn.mode(true):sub(1, 1)
+  local shown, from = home()
+  if #shown == 0 then
+    if prev_mode == "i" or prev_mode == "t" then vim.cmd("stopinsert") end
+    local origin_win = from == api.nvim_get_current_tabpage() and cur_win or nil
+    return bring_back(function(item)
+      if M.reveal(item) then zoom_shown_item(item, origin_win, "n") end
+    end, from)
+  end
+  local item = #shown == 1 and shown[1] or current_of(shown)
+  if not item then
+    if prev_mode == "i" or prev_mode == "t" then vim.cmd("stopinsert") end
+    return M.switch(function(picked)
+      if M.reveal(picked) then zoom_shown_item(picked, cur_win, "n") end
+    end, { items = shown, new = false, back = from })
+  end
+  local started_outside = (from == api.nvim_get_current_tabpage()) and (cur_win ~= item.win)
+  if started_outside and (prev_mode == "i" or prev_mode == "t") then vim.cmd("stopinsert") end
+  zoom_shown_item(item, started_outside and cur_win or nil, prev_mode)
+end
+
 ---The native agent on the right, else the one asked for -- the installed
 ---agents, in provider order; with one installed, that one -- for
 ---the keys only a native agent answers (resume, continue, model, transcripts).

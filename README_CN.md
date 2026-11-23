@@ -143,7 +143,7 @@ return {
 | `s` | 管理窗口 |
 | `<leader>` | AI、Git、调试、UI、会话等全局领域 |
 | `<leader>an` / `al` | 新建 / 切换 AI 聊天 |
-| `<leader>ac` / `af` | 显示隐藏 / 聚焦 AI 聊天 |
+| `<leader>ac` / `af` / `az`（`<C-.>`） | 显示隐藏 / 聚焦 / 全屏缩放 AI 聊天 |
 | `<leader>ar` / `aR` / `am` | 恢复 / 继续 / 选择原生模型 |
 | `<leader>ab` / `as` / `ai` | 添加文件 / 选区 / 编辑提示词 |
 | `<leader>aV` / `av` | 开始 Review round / 查看基线之后的变化 |

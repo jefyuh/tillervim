@@ -3,8 +3,8 @@
 -- Both were silent losses rather than errors, which is why they survived so
 -- long: a click inside the panel left Terminal-mode, so returning to the window
 -- manager and clicking back put the panel in Normal mode; and a quick double
--- Esc -- the agents' own "go back a message" -- was eaten by Snacks and by the
--- global <Esc><Esc> before either agent could see it.
+-- Esc -- the agents' own "go back a message" -- was eaten by Snacks'
+-- `term_normal` double-tap unless disabled and guarded buffer-locally.
 local t = dofile("tests/helper.lua")
 
 local config = require("agent_workbench.state")
@@ -61,7 +61,7 @@ end
 local plain = open_panel({ bin })
 t.ok(ai_term.is_agent_buf(plain), "the fake agent reads as an agent buffer")
 t.eq(vim.fn.maparg("<Esc>", "t", false, true).buffer, 1,
-  "Esc is buffer-local on the panel, so it reaches the agent instead of <Esc><Esc>")
+  "Esc is buffer-local on the panel, so it reaches the agent without waiting on prefixes")
 t.ok(buffer_local("<LeftMouse>"),
   "an unwrapped panel guards the mouse, so a click inside it keeps Terminal-mode")
 t.ok(buffer_local("<ScrollWheelDown>"),
@@ -69,9 +69,11 @@ t.ok(buffer_local("<ScrollWheelDown>"),
 t.ok(not buffer_local_n("<PageUp>"),
   "an unwrapped panel leaves scrolling to Nvim, which owns the scrollback there")
 
--- Leaving Terminal-mode still has two documented keys; only the Esc pair moved.
-t.eq(vim.fn.maparg("jk", "t", false, true).buffer, 0, "jk still leaves Terminal-mode")
-t.eq(vim.fn.maparg("<C-\\>", "t", false, true).buffer, 0, "<C-\\> still leaves Terminal-mode")
+-- Builtin <C-\><C-n> leaves Terminal-mode; distribution defaults install no
+-- extra Terminal-mode exit aliases (<Esc><Esc>, jk, <C-]>, <C-\>).
+for _, lhs in ipairs({ "<Esc><Esc>", "jk", "<C-]>", "<C-\\>" }) do
+  t.eq(vim.fn.maparg(lhs, "t", false, true), {}, lhs .. " is unmapped in Terminal-mode by default")
+end
 
 -- Wrapped panel: tmux turns mouse reporting on, Nvim forwards the click and
 -- never leaves Terminal-mode on its own. Mapping there would take the click

@@ -146,10 +146,12 @@ plugin's own checks).
 
 ### macOS input-source switching
 
-- **A Chinese input method was selected while already in Normal mode** — press
-  `<C-\>` or, outside `help`/`man`, `<C-]>`. Nvim stays in Normal mode, switches
-  to its detected Latin layout, and restores the captured source on the next
-  Insert only if that switch succeeded. Repeating the chord is harmless.
+- **A Chinese input method was selected while already in Normal mode** — bind a
+  personal Normal-mode escape chord in `lua/config/keymaps.lua` (for example on
+  `<C-\>`) that calls `require("editor_core.input_method").ensure_normal_source()`.
+  Nvim stays in Normal mode, switches to its detected Latin layout, and restores
+  the captured source on the next Insert only if that switch succeeded. Repeating
+  the chord is harmless.
 - **Ghostty's window chrome flashes when returning to input mode** — macism's
   default CJK workaround creates a temporary key window, so Ghostty briefly
   loses and regains focus. Set `opts.input_method.wait_time_ms = 0` on
@@ -988,7 +990,7 @@ sourcemap mapping is derived from. Nothing else needs configuring; a hand-set
   The tabline and buffer pickers now exclude terminals, including listed ones
   and the buffer picker's hidden entries. Restart Nvim to load the fix; focus
   the AI panel with `<leader>af`. To recover an affected layout first, leave
-  terminal input with `jk` or `Ctrl-\`, then use `;f` to reopen your file in an
+  terminal input with `<C-\><C-n>`, then use `;f` to reopen your file in an
   editor window.
 - **`gx` cannot open a local report path in agent output** — existing source,
   text and image references open in Nvim (jumping to `:line`, `:line:col`, `:line-end`, or
@@ -997,12 +999,12 @@ sourcemap mapping is derived from. Nothing else needs configuring; a hand-set
   media, document and archive deliverables (`.mp4`, `.mov`, `.mp3`, `.pdf`,
   Office/iWork, archives) open externally via `vim.ui.open`. Paths and
   enclosed links can wrap across up to 16 terminal rows, indented agent TUI blocks, TUI
-  borders or scrollbars; press `Ctrl-\` or `jk`, then `gx` on any part (or
+  borders or scrollbars; press `<C-\><C-n>`, then `gx` on any part (or
   select the range in Visual mode and press `gx`). Paths must exist on this
   machine; an incomplete path or a directory prefix alone is not opened.
 - **`gx` opens only the first half of a terminal table URL** — the mapping now
   reconstructs parenthesized or angle-bracket links across up to 16 rows in the
-  same column. Leave terminal input with `Ctrl-\` or `jk`, then press `gx` on
+  same column. Leave terminal input with `<C-\><C-n>`, then press `gx` on
   either part. The closing delimiter must be present in the terminal buffer;
   if the TUI has truncated the link, use the complete URL in `<leader>at`.
 - **A long link in agent output opens or yanks only up to the panel's edge**
@@ -1047,7 +1049,7 @@ sourcemap mapping is derived from. Nothing else needs configuring; a hand-set
   terminal** — Snacks protects terminal windows from buffer replacement. The
   `-` and `;o` mappings now focus an editor window in the current tab before
   opening Oil, creating a blank editor split if needed. Leave terminal input
-  first with `Ctrl-\` or `jk`; plain `-` in terminal input still goes to the TUI.
+  first with `<C-\><C-n>`; plain `-` in terminal input still goes to the TUI.
 - **Dashboard GitHub sections show "GitHub unavailable"** — the original `gh`
   error appears in that section without a job-error popup. `EOF` and
   `connection reset by peer` indicate a failed connection; if the address is

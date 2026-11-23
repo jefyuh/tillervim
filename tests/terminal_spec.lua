@@ -163,6 +163,8 @@ local floating = Snacks.terminal("sleep 30",
 vim.wait(300, function() return false end)
 t.eq(relative_of(floating.win), "editor", "a lazygit-style terminal opens as a float")
 vim.api.nvim_set_current_win(floating.win)
+t.eq(vim.fn.maparg("<Esc>", "t", false, true), {},
+  "Snacks terminals disable double-Esc term_normal so <Esc> stays unmodified")
 for _, key in ipairs({ "<C-h>", "<C-j>", "<C-k>", "<C-l>" }) do
   t.eq(nav_rhs(key), "", key .. " is a no-op inside a floating terminal")
 end
@@ -183,9 +185,8 @@ t.ok(docked ~= left and relative_of(docked) == "", "a split terminal is a layout
 t.eq(nav_rhs("<C-l>"), "", "<C-l> at the right edge is a no-op in a split terminal")
 t.eq(nav_rhs("<C-h>"), "<C-\\><C-n><C-w>h", "<C-h> from a split terminal moves to the neighbour")
 
--- Ctrl-comma owns the deliberate terminal/editor jump now that the adjacent
--- Ctrl-backslash chord is a repeatable Escape. Exercise the Normal half against
--- real windows; input_method_spec guards the terminal-input prefix.
+-- Ctrl-comma owns the deliberate terminal/editor jump. Exercise the Normal
+-- half against real windows; input_method_spec guards the terminal-input prefix.
 vim.api.nvim_feedkeys(vim.keycode("<C-,>"), "tx", false)
 t.eq(vim.api.nvim_get_current_win(), left, "Ctrl-comma reaches the editor from terminal-Normal")
 vim.api.nvim_feedkeys(vim.keycode("<C-,>"), "tx", false)

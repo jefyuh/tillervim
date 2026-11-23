@@ -378,7 +378,7 @@ local sections = {
     -- The chat on the right, whatever it is (local-plugin/agent-workbench.nvim/lua/agent_workbench/slot.lua): open a new one,
     -- switch to another, hide or bring it back, go into it. Billing is named
     -- in the new-chat picker's entries and the switcher's labels.
-    { "chats",     icon = "󰍩 ", color = "blue",   keys = { "n", "l", "c", "f" } },
+    { "chats",     icon = "󰍩 ", color = "blue",   keys = { "n", "l", "c", "f", "z" } },
     -- What goes to the chat on the right. `s` only exists in Visual mode and
     -- `S` only in oil buffers.
     { "context",   icon = "󰈔 ", color = "cyan",   keys = { "b", "i", "s", "S" } },

@@ -76,4 +76,25 @@ t.eq(H(restored_src), src_before, "unzoom restores the editor window")
 t.ok(restored_panel ~= nil and H(restored_panel) == panel_before,
   "and brings the panel back at its own size, rather than closing it")
 
+-- Zooming an edgy-owned panel itself expands it across the tabpage and
+-- survives edgy's relayout, then restores the panel's original thickness.
+vim.api.nvim_set_current_win(restored_panel)
+t.eq(W.toggle_zoom(restored_panel), true, "an edgy panel zooms in place")
+settle()
+t.ok(H(restored_panel) > panel_before, "edgy panel zoom survives edgy re-applying its layout")
+t.eq(W.is_zoomed(restored_panel), true, "is_zoomed reports the zoomed panel")
+t.eq(W.toggle_zoom(restored_panel), false, "second toggle_zoom unzooms the panel")
+settle()
+local final_src, final_panel = layout()
+t.eq(H(final_src), src_before, "unzooming the panel restores the editor height")
+t.eq(H(final_panel), panel_before, "and restores the edgy panel's original height")
+
+-- Closing a zoomed panel automatically cleans up zoom state for the tabpage.
+W.toggle_zoom(final_panel)
+settle()
+vim.api.nvim_win_close(final_panel, true)
+settle()
+t.eq(W.is_zoomed(final_src), false, "closing a zoomed panel clears zoom state")
+t.ok(H(final_src) >= src_before + panel_before, "editor reclaims the closed panel's space")
+
 t.done()

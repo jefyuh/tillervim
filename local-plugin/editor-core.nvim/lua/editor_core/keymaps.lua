@@ -50,18 +50,6 @@ function M.setup()
   -- Normal mode only: mapping bare <Esc> in insert mode can add latency to / mis-fire
   -- on terminal escape sequences (arrows, Alt, F-keys), and there's no hlsearch to clear there.
   map("n", "<Esc>", "<cmd>nohlsearch<cr><Esc>", { desc = "Escape and clear hlsearch" })
-  -- A repeatable Escape chord for input methods that consume bare Esc. In Normal
-  -- mode it also captures a manually selected input method and returns to the
-  -- Normal source without changing modes; InsertEnter restores only a source
-  -- that Nvim actually switched away. `help` and `man` buffers are the exception
-  -- -- <C-]> is their primary navigation -- and local-plugin/editor-core.nvim/lua/editor_core/autocmds.lua gives the
-  -- builtin back there, buffer-locally.
-  local function normal_escape()
-    vim.cmd.nohlsearch()
-    require("editor_core.input_method").ensure_normal_source()
-  end
-  map("n", "<C-]>", normal_escape, { desc = "Escape with Normal input source" })
-  map("n", "<C-\\>", normal_escape, { desc = "Escape with Normal input source" })
 
   -- Better up/down on wrapped lines
   map({ "n", "x" }, "j", "v:count == 0 ? 'gj' : 'j'", { expr = true, desc = "Down" })
@@ -90,23 +78,9 @@ function M.setup()
     { desc = "Indent line(s)" })
 
   -- Insert mode
-  map("i", "jk", "<ESC>", { desc = "Exit Insert mode", noremap = true, silent = true })
   map("i", "<C-c>", "<ESC>", { desc = "Exit Insert mode", noremap = true, silent = true })
-  map("i", "<C-]>", "<Esc>", { desc = "Exit input mode", noremap = true, silent = true })
-  map("i", "<C-\\>", "<Esc>", { desc = "Exit input mode", noremap = true, silent = true })
-  map("x", "<C-]>", "<Esc>", { desc = "Exit selection mode", noremap = true, silent = true })
-  map("x", "<C-\\>", "<Esc>", { desc = "Exit selection mode", noremap = true, silent = true })
 
   -- Terminal mode
-  -- The agent panels opt out of this pair: both CLIs read a quick double Esc as
-  -- their own "go back a message", so local-plugin/agent-workbench.nvim/lua/agent_workbench/terminal.lua maps a buffer-local
-  -- <Esc> there. <C-]> is the input-method-safe way to stay in the panel and
-  -- reach terminal-Normal; `jk` remains the unmodified alternative except in
-  -- lazygit, whose buffer-local j must navigate immediately (snacks.lua).
-  map("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Exit terminal mode", noremap = true, silent = true })
-  map("t", "jk", "<C-\\><C-n>", { desc = "Exit terminal mode", noremap = true, silent = true })
-  map("t", "<C-]>", "<C-\\><C-n>", { desc = "Exit input mode", noremap = true, silent = true })
-  map("t", "<C-\\>", "<C-\\><C-n>", { desc = "Exit input mode", noremap = true, silent = true })
   -- No "close terminal" key. `exit` in the shell ends the job and the buffer
   -- goes with it, <C-/> toggles the panel away, and :bd! covers a wedged one --
   -- a dedicated chord only added a way to force-delete the wrong buffer.

@@ -78,7 +78,7 @@ autocmd("TermOpen", {
 
     -- Terminal-only actions join the comma menu. Plain keys also survive
     -- outer tmux sessions where Ctrl-digit encodings are lost. Leave terminal
-    -- input untouched: use jk / Ctrl-] before choosing a numbered terminal.
+    -- input untouched: use <C-\><C-n> before choosing a numbered terminal.
     for n = 1, 9 do
       vim.keymap.set("n", "<localleader>" .. n, function()
         require("editor_core.terminal").focus(n)
@@ -150,25 +150,6 @@ autocmd("FileType", {
       buffer = event.buf,
       silent = true,
       desc = "Close window",
-    })
-  end,
-})
-
--- Give <C-]> back to the buffers that navigate with it.
--- local-plugin/editor-core.nvim/lua/editor_core/keymaps.lua takes the global Normal-mode <C-]> for a repeatable Escape,
--- because input methods that swallow bare Esc leave no other way out. That
--- trade is fine everywhere a tag jump is incidental, but `help` and `man` have
--- no second key for following a link, so the builtin wins in those buffers.
--- The Escape half is not lost with it: <Esc> and <C-\> still clear hlsearch.
-autocmd("FileType", {
-  group = augroup("tag_jump_filetypes", { clear = true }),
-  pattern = { "help", "man" },
-  callback = function(event)
-    vim.keymap.set("n", "<C-]>", "<C-]>", {
-      buffer = event.buf,
-      remap = false,
-      silent = true,
-      desc = "Follow tag under cursor",
     })
   end,
 })
