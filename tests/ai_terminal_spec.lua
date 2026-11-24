@@ -303,111 +303,34 @@ do
     pcall(vim.api.nvim_buf_delete, b, { force = true })
   end
 
-  -- Antigravity <leader>ar: workspace-isolated session discovery and async picker resume.
+  -- Antigravity <leader>ar: starts agy directly and dispatches /resume once the prompt renders.
   do
-    local agy_history = require("agent_workbench.backend.antigravity")
     local fixture_root = vim.fn.tempname()
-    local repo_a = fixture_root .. "/space repo/project-a"
-    local repo_b = fixture_root .. "/space repo/project-b"
-    local repo_empty = fixture_root .. "/space repo/empty"
-    local agy_data = fixture_root .. "/agy-data"
+    local repo_a = fixture_root .. "/project-a"
     local agy_stub_dir = fixture_root .. "/bin"
-    local argv_out = fixture_root .. "/agy-argv.txt"
-    for _, d in ipairs({ repo_a .. "/.git", repo_b .. "/.git", repo_empty .. "/.git", agy_data .. "/cache", agy_stub_dir }) do
+    local stdin_out = fixture_root .. "/agy-stdin.txt"
+    for _, d in ipairs({ repo_a .. "/.git", agy_stub_dir }) do
       vim.fn.mkdir(d, "p")
     end
     local real_a = vim.uv.fs_realpath(repo_a) or repo_a
-    local real_b = vim.uv.fs_realpath(repo_b) or repo_b
-    local encoded_a = "file://" .. real_a:gsub(" ", "%%20")
     local agy_stub = agy_stub_dir .. "/agy"
     vim.fn.writefile({
-      "#!/bin/sh",
-      'printf "%s\\n" "$PWD" > ' .. vim.fn.shellescape(argv_out),
-      'for arg in "$@"; do printf "%s\\n" "$arg" >> ' .. vim.fn.shellescape(argv_out) .. '; done',
-      "exec cat",
+      "#!/usr/bin/env python3",
+      "import os, sys, tty",
+      "tty.setraw(0)",
+      "sys.stdout.write('────────────────────────────────────────\\r\\n>\\r\\n────────────────────────────────────────\\r\\n')",
+      "sys.stdout.flush()",
+      "out = " .. string.format("%q", stdin_out),
+      "with open(out, 'wb') as f:",
+      "    f.write((os.getcwd() + '\\n').encode())",
+      "    f.flush()",
+      "    while True:",
+      "        b = os.read(0, 256)",
+      "        if not b: break",
+      "        f.write(b)",
+      "        f.flush()",
     }, agy_stub)
     vim.fn.setfperm(agy_stub, "rwx------")
-
-    vim.fn.writefile({ vim.json.encode({
-      conversations = {
-        ["11111111-aaaa-bbbb-cccc-000000000001"] = {
-          is_internal = false,
-          last_modified_time = "2026-11-24T10:00:00+08:00",
-          summary = {
-            ID = "11111111-aaaa-bbbb-cccc-000000000001",
-            Title = "Older Project A Thread",
-            Preview = "older prompt",
-            NumSteps = 12,
-            AppDataDir = "antigravity-cli",
-            WorkspaceURIs = { encoded_a },
-          },
-        },
-        ["22222222-aaaa-bbbb-cccc-000000000002"] = {
-          is_internal = false,
-          last_modified_time = "2026-11-24T16:30:00+08:00",
-          summary = {
-            ID = "22222222-aaaa-bbbb-cccc-000000000002",
-            Title = "",
-            Preview = "Newest\n  fallback preview",
-            NumSteps = 45,
-            AppDataDir = "antigravity-cli",
-            WorkspaceURIs = { encoded_a, "file:///tmp/staged-plugin-workspace" },
-          },
-        },
-        ["33333333-aaaa-bbbb-cccc-000000000003"] = {
-          is_internal = false,
-          last_modified_time = "2026-11-24T17:00:00+08:00",
-          summary = {
-            ID = "33333333-aaaa-bbbb-cccc-000000000003",
-            Title = "Other Repo Thread",
-            NumSteps = 99,
-            AppDataDir = "antigravity-cli",
-            WorkspaceURIs = { "file://" .. real_b },
-          },
-        },
-        ["44444444-aaaa-bbbb-cccc-000000000004"] = {
-          is_internal = true,
-          last_modified_time = "2026-11-24T17:05:00+08:00",
-          summary = {
-            ID = "44444444-aaaa-bbbb-cccc-000000000004",
-            Title = "Internal Subagent",
-            NumSteps = 30,
-            AppDataDir = "antigravity-cli",
-            WorkspaceURIs = { encoded_a },
-          },
-        },
-        ["55555555-aaaa-bbbb-cccc-000000000005"] = {
-          is_internal = false,
-          last_modified_time = "2026-11-24T17:10:00+08:00",
-          summary = {
-            ID = "55555555-aaaa-bbbb-cccc-000000000005",
-            Title = "Zero Step Empty",
-            NumSteps = 0,
-            AppDataDir = "antigravity-cli",
-            WorkspaceURIs = { encoded_a },
-          },
-        },
-        ["66666666-aaaa-bbbb-cccc-000000000006"] = {
-          is_internal = false,
-          last_modified_time = "2026-11-24T17:15:00+08:00",
-          summary = {
-            ID = "66666666-aaaa-bbbb-cccc-000000000006",
-            Title = "Desktop App Thread",
-            NumSteps = 8,
-            AppDataDir = "antigravity",
-            WorkspaceURIs = { encoded_a },
-          },
-        },
-      },
-    }) }, agy_data .. "/cache/conversation_metadata.json")
-
-    agy_history._data_dir = agy_data
-    local listed = agy_history.sessions(repo_a)
-    t.eq(#listed, 2, "Antigravity history isolates sessions belonging to the requested workspace")
-    t.eq(listed[1].id, "22222222-aaaa-bbbb-cccc-000000000002", "newest workspace session sorts first")
-    t.eq(listed[1].title, "Newest fallback preview", "empty title falls back to single-line preview")
-    t.eq(listed[2].id, "11111111-aaaa-bbbb-cccc-000000000001", "older session in same workspace sorts second")
-    t.eq(#agy_history.sessions(repo_empty), 0, "workspace with no matching sessions returns empty")
 
     local restore_agy = require("agent_workbench.options")._patch({
       native = { antigravity = { command = agy_stub, args = { "--settings", '{"altScreenMode":"always","pickerGrouping":"grouped"}' }, wrap_tmux = false } },
@@ -418,75 +341,44 @@ do
     })
 
     local real_select, real_notify = vim.ui.select, vim.notify
-    local notes, pending_select = {}, nil
+    local notes, select_calls = {}, 0
     vim.notify = function(msg, level) notes[#notes + 1] = { msg = tostring(msg), level = level } end
-    vim.ui.select = function(items, opts, on_choice)
-      pending_select = { items = items, opts = opts, on_choice = on_choice }
-    end
+    vim.ui.select = function(...) select_calls = select_calls + 1; return real_select(...) end
 
     local ai = require("agent_workbench")
     vim.cmd("tabnew")
-    local empty_file = repo_empty .. "/main.lua"
-    vim.fn.writefile({ "return 1" }, empty_file)
-    vim.cmd.edit(vim.fn.fnameescape(empty_file))
-    ai.resume()
-    t.eq(pending_select, nil, "empty workspace opens no session picker")
-    t.eq(ai.session("antigravity"), nil, "empty workspace starts no blank Antigravity terminal")
-    t.ok(notes[#notes] and notes[#notes].msg:find("No Antigravity sessions found", 1, true) ~= nil,
-      "empty workspace explains there are no sessions for this directory")
-
     local file_a = repo_a .. "/init.lua"
     vim.fn.writefile({ "return true" }, file_a)
     vim.cmd.edit(vim.fn.fnameescape(file_a))
-    notes = {}
     ai.resume()
-    t.ok(pending_select ~= nil and pending_select.opts.kind == "ai_antigravity_resume",
-      "<leader>ar opens the Antigravity session picker")
-    t.eq(#pending_select.items, 2, "picker offers only the current project's sessions")
-    t.eq(ai.session("antigravity"), nil, "Antigravity stays unstarted while the picker is open")
-
-    -- Cancel starts nothing.
-    local cancel_cb = pending_select.on_choice
-    pending_select = nil
-    cancel_cb(nil)
-    t.eq(ai.session("antigravity"), nil, "cancelling the resume picker starts no session")
-
-    -- Async selection (as Snacks.picker runs it) spawns agy --conversation <id> in repo_a.
-    notes = {}
-    ai.resume()
-    local chosen = pending_select.items[1]
-    local confirm_cb = pending_select.on_choice
-    pending_select = nil
-    vim.schedule(function() confirm_cb(chosen) end)
-    t.ok(vim.wait(2000, function()
-      local s = ai.session("antigravity")
-      return s ~= nil and s.alive
-    end, 20), "confirming a session starts Antigravity")
-    t.ok(vim.wait(2000, function() return vim.fn.filereadable(argv_out) == 1 end, 20),
-      "stand-in agy recorded its invocation")
-    local recorded = vim.fn.readfile(argv_out)
-    t.eq(vim.uv.fs_realpath(recorded[1]) or recorded[1], real_a, "resumed Antigravity runs in the project root")
-    t.eq({ recorded[#recorded - 1], recorded[#recorded] }, { "--conversation", chosen.id },
-      "resumed Antigravity receives --conversation <selected-id>")
+    t.eq(select_calls, 0, "<leader>ar opens no Neovim picker when launching Antigravity")
+    t.ok(vim.wait(3000, function()
+      if vim.fn.filereadable(stdin_out) ~= 1 then return false end
+      local content = table.concat(vim.fn.readfile(stdin_out, "b"), "\n")
+      return content:find("/resume\r", 1, true) ~= nil
+    end, 20), "cold <leader>ar launches Antigravity and submits /resume once prompt is ready")
+    local raw_lines = vim.fn.readfile(stdin_out, "b")
+    t.eq(vim.uv.fs_realpath(raw_lines[1]) or raw_lines[1], real_a, "Antigravity starts in the edited file's project root")
     local started_notes = vim.tbl_filter(function(n)
       return n.msg:find("Started Antigravity · terminal · subscription to resume a session", 1, true) ~= nil
     end, notes)
-    t.eq(#started_notes, 1, "async picker resume announces startup once")
+    t.eq(#started_notes, 1, "cold <leader>ar announces Antigravity startup once")
 
-    -- Pressing <leader>ar while already active focuses the session without opening a picker.
+    -- Pressing <leader>ar while already active focuses the session and types nothing more into it.
     notes = {}
+    local before_bytes = vim.fn.getfsize(stdin_out)
     vim.cmd("stopinsert")
     vim.cmd("wincmd h")
     ai.resume()
-    t.eq(pending_select, nil, "<leader>ar on a running Antigravity session opens no picker")
-    t.ok(notes[#notes] and notes[#notes].msg:find("An Antigravity session is already active", 1, true) ~= nil,
-      "<leader>ar on a running Antigravity session explains why")
+    vim.wait(350, function() return false end, 25)
+    t.eq(vim.fn.getfsize(stdin_out), before_bytes, "<leader>ar on a running Antigravity session types nothing into the PTY")
+    t.ok(notes[#notes] and notes[#notes].msg:find("An Antigravity session is already active: use /resume in it", 1, true) ~= nil,
+      "<leader>ar on a running Antigravity session focuses and explains")
 
     vim.cmd("stopinsert")
     assert(ai.stop("antigravity"))
     vim.cmd("tabclose!")
     vim.ui.select, vim.notify = real_select, real_notify
-    agy_history._data_dir = nil
     restore_agy()
     vim.fn.delete(fixture_root, "rf")
   end

@@ -467,7 +467,6 @@ local function back_to(tab)
     api.nvim_set_current_tabpage(tab)
   end
 end
-M.back_to = back_to
 
 ---vim.ui.select, with the choice handled under a guard: it arrives later,
 ---outside the mapping that asked, where an error would be a traceback. A
@@ -826,9 +825,9 @@ function M.native_target(cb, opts)
   opts = opts or {}
   local shown, from = home()
   local natives = vim.tbl_filter(function(item) return item.kind == "native" end, shown)
-  if #natives == 1 then return cb(natives[1].agent, from) end
+  if #natives == 1 then return cb(natives[1].agent) end
   local current = #natives > 1 and current_of(natives)
-  if current then return cb(current.agent, from) end
+  if current then return cb(current.agent) end
   local agents = {}
   for _, b in ipairs(config.backends()) do
     if b.kind == "native" and b.available then agents[#agents + 1] = b.agent end
@@ -837,12 +836,12 @@ function M.native_target(cb, opts)
     back_to(from)
     return notify("No configured native agent is installed", WARN)
   end
-  if #agents == 1 then return cb(agents[1], from) end
+  if #agents == 1 then return cb(agents[1]) end
   select(agents, {
     prompt = opts.prompt or "Which native agent?",
     kind = "ai_slot_agent",
     format_item = function(agent) return config.agents[agent].label end,
-  }, function(agent) cb(agent, from) end, from)
+  }, cb, from)
 end
 
 ---------------------------------------------------------------------------

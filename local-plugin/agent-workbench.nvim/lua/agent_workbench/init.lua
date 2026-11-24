@@ -105,7 +105,7 @@ function M.zoom() return guard("AI chat", "zoom", function() slot().zoom() end) 
 local function native_key(method, why)
   return function()
     return guard("AI", method, function()
-      slot().native_target(function(agent, from)
+      slot().native_target(function(agent)
         guard(label_of(agent), method, function()
           local b, item = backend(agent), slot().native_item(agent)
           local was = b.running()
@@ -114,15 +114,8 @@ local function native_key(method, why)
           -- terminal does show.
           local asks = not was and (b.asks_first or {})[method]
           if not slot().make_room(item, { hide = not asks }) then return end
-          local announced = false
-          local function announce()
-            if not announced and not was and b.running() then
-              announced = true
-              notify(("Started %s %s"):format(slot().label(item), why))
-            end
-          end
-          b[method]({ back = from, on_started = announce })
-          announce()
+          b[method]()
+          if not was and b.running() then notify(("Started %s %s"):format(slot().label(item), why)) end
         end)
       end)
     end)

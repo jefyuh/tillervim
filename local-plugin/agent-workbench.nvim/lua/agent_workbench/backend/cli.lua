@@ -31,10 +31,17 @@ local function terminal_command(kind, argv, env)
 end
 M._terminal_command = terminal_command
 
+local function agy_prompt_ready(buf)
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then return false end
+  for _, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+    if line:match("^>%s*$") then return true end
+  end
+  return false
+end
+
 function M.new(kind)
   local backend, session = {}, nil
   assert(require("agent_workbench.options").get().native[kind])
-  if kind == "antigravity" then backend.asks_first = { resume = true } end
   local function agent_label()
     local agent = require("agent_workbench.state").agents[kind]
     return agent and agent.label or kind
@@ -54,7 +61,7 @@ function M.new(kind)
     if ok then session = nil end
     return ok, err
   end
-  local function open(extra, explicit_root)
+  local function open(extra)
     if not backend.running() then
       local config = require("agent_workbench.options").get()
       local native = assert(config.native[kind])
@@ -64,7 +71,7 @@ function M.new(kind)
       end
       vim.list_extend(argv, extra or {})
       local env = terminal_env()
-      local root = explicit_root or require("agent_workbench.context").project_root(vim.api.nvim_buf_get_name(0))
+      local root = require("agent_workbench.context").project_root(vim.api.nvim_buf_get_name(0))
       session = terminals.open(kind, {
         argv = terminal_command(kind, argv, env),
         cwd = root,
@@ -87,6 +94,42 @@ function M.new(kind)
     vim.api.nvim_set_current_win(win)
     vim.cmd.startinsert()
   end
+  local function send_agy_slash(target, slash)
+    local timer = assert(vim.uv.new_timer())
+    local stable, elapsed = 0, 0
+    local function close_timer()
+      if not timer:is_closing() then
+        timer:stop()
+        timer:close()
+      end
+    end
+    timer:start(100, 100, vim.schedule_wrap(function()
+      elapsed = elapsed + 100
+      if session ~= target or not backend.running() then
+        close_timer()
+        return
+      end
+      if agy_prompt_ready(target.buf) then
+        stable = stable + 1
+      else
+        stable = 0
+      end
+      if stable >= 2 then
+        close_timer()
+        local sent = terminals.send(target, slash)
+        if not sent then return end
+        -- Bubble Tea updates the slash-command state on the text tick before
+        -- Enter dispatches `/resume`; a 0ms gap arrives in one read and drops Enter.
+        vim.defer_fn(function()
+          if session == target and backend.running() then
+            terminals.send(target, "\r")
+          end
+        end, 120)
+      elseif elapsed >= 15000 then
+        close_timer()
+      end
+    end))
+  end
   backend.reveal = function() open() end
   backend.focus = function() open() end
   function backend.continue()
@@ -98,52 +141,20 @@ function M.new(kind)
     end
     open({ "--continue" })
   end
-  function backend.resume(opts)
+  function backend.resume()
     if backend.running() then
       open()
       local label = agent_label()
       local article = label:match("^[AEIOUaeiou]") and "An" or "A"
-      vim.notify(("%s %s session is already active; exit it before resuming another"):format(article, label),
+      local hint = kind == "antigravity" and "use /resume in it" or "exit it before resuming another"
+      vim.notify(("%s %s session is already active: %s"):format(article, label, hint),
         vim.log.levels.INFO, { title = "AI" })
       return
     end
     if kind == "kimi" then return open({ "--session" }) end
     if kind == "antigravity" then
-      opts = opts or {}
-      local root = require("agent_workbench.context").project_root(vim.api.nvim_buf_get_name(0))
-      local agy = require("agent_workbench.backend.antigravity")
-      local sessions = agy.sessions(root)
-      local slot = require("agent_workbench.slot")
-      if #sessions == 0 then
-        slot.back_to(opts.back)
-        vim.notify(("No Antigravity sessions found for %s"):format(root), vim.log.levels.WARN, { title = "AI" })
-        return
-      end
-      local tab = vim.api.nvim_get_current_tabpage()
-      vim.ui.select(sessions, {
-        prompt = ("Resume Antigravity (%s)"):format(vim.fs.basename(root)),
-        kind = "ai_antigravity_resume",
-        format_item = agy.format_session,
-      }, function(choice)
-        if not choice then return slot.back_to(opts.back) end
-        local ok, err = xpcall(function()
-          if vim.api.nvim_tabpage_is_valid(tab) and vim.api.nvim_get_current_tabpage() ~= tab then
-            vim.api.nvim_set_current_tabpage(tab)
-          end
-          if backend.running() then
-            open()
-            vim.notify("An Antigravity session is already active; exit it before resuming another",
-              vim.log.levels.INFO, { title = "AI" })
-            return
-          end
-          if not slot.make_room(slot.native_item("antigravity")) then return end
-          open({ "--conversation", choice.id }, root)
-          if opts.on_started then opts.on_started() end
-        end, debug.traceback)
-        if not ok then
-          vim.notify(("Antigravity resume failed:\n%s"):format(err), vim.log.levels.ERROR, { title = "AI" })
-        end
-      end)
+      open()
+      if session and backend.running() then send_agy_slash(session, "/resume") end
       return
     end
     open()
