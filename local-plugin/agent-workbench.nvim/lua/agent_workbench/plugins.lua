@@ -82,9 +82,10 @@ function M.claude_args()
 end
 
 ---Agy discovers workspace plugins under .agents/plugins. Stage into a stable
----cache path keyed by the configured plugin list so every launch in a project
----shares the same workspace URI (preserving /resume workspace grouping and
----preventing dangling temp paths), while refreshing local edits per spawn.
+---OS-temp path keyed by the configured plugin list: `os_tmpdir()` (`/var/...` on
+---macOS, `/tmp/...` on Linux) sorts lexicographically after `/Users/...` and
+---`/home/...`, so `agy` keeps the real project directory first in WorkspaceURIs
+---when grouping `/resume` by workspace, while reusing one stable URI across runs.
 ---Only the plugin installer gets the disposable home.
 function M.antigravity_args(command)
   local plugins = M.resolve("antigravity")
@@ -92,7 +93,8 @@ function M.antigravity_args(command)
   local identity = {}
   for _, plugin in ipairs(plugins) do identity[#identity + 1] = { plugin.name, plugin.path } end
   local key = "agy-" .. vim.fn.sha256(vim.json.encode(identity)):sub(1, 12)
-  local root = vim.fn.stdpath("cache") .. "/ai-plugins/" .. key
+  local tmp = (vim.uv.os_tmpdir() or "/tmp"):gsub("/+$", "")
+  local root = tmp .. "/tillervim-ai-plugins-" .. (vim.uv.getuid and vim.uv.getuid() or "user") .. "/" .. key
   local installer = root .. "/installer-" .. vim.fn.getpid()
   local workspace = root .. "/workspace"
   local target = workspace .. "/.agents/plugins"
