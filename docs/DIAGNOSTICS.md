@@ -400,7 +400,7 @@ old fixture or document; Claude protocol support is a later extension.
   Neovim's `libvterm` never renders half-flushed 1024-byte PTY chunks;
   `opts.native.codex.wrap_tmux = false` or `opts.native.antigravity.wrap_tmux = false`
   gives a direct comparison. Antigravity also defaults to session-only
-  `--settings '{"altScreenMode":"always"}'` (leaving `tmux` root `WheelUpPane`
+  `--settings '{"altScreenMode":"always","pickerGrouping":"grouped"}'` (leaving `tmux` root `WheelUpPane`
   unbound) so its TUI renders on the alternate screen without inline scrollback
   cursor jumps and handles mouse wheel scrolling within its own viewport; Normal-mode downward
   scrolling in `:terminal` windows is also clamped at the bottom row so

@@ -105,7 +105,7 @@ function M.zoom() return guard("AI chat", "zoom", function() slot().zoom() end) 
 local function native_key(method, why)
   return function()
     return guard("AI", method, function()
-      slot().native_target(function(agent)
+      slot().native_target(function(agent, from)
         guard(label_of(agent), method, function()
           local b, item = backend(agent), slot().native_item(agent)
           local was = b.running()
@@ -114,8 +114,15 @@ local function native_key(method, why)
           -- terminal does show.
           local asks = not was and (b.asks_first or {})[method]
           if not slot().make_room(item, { hide = not asks }) then return end
-          b[method]()
-          if not was and b.running() then notify(("Started %s %s"):format(slot().label(item), why)) end
+          local announced = false
+          local function announce()
+            if not announced and not was and b.running() then
+              announced = true
+              notify(("Started %s %s"):format(slot().label(item), why))
+            end
+          end
+          b[method]({ back = from, on_started = announce })
+          announce()
         end)
       end)
     end)
@@ -447,10 +454,13 @@ function M.open(id, opts)
   local kind = id:gsub("^native:", "")
   if not config.agents[kind] then return nil, { code = "unavailable", message = "Native backend is not enabled: " .. kind } end
   local item = slot().native_item(kind)
-  if not slot().make_room(item) then return nil, { code = "cancelled", message = "No room for the native session" } end
+  local b = backend(kind)
+  local was = b.running()
   local method = ({ new = "reveal", resume = "resume", continue = "continue", model = "select_model" })[opts.mode or "new"]
   assert(method, "Unknown native open mode")
-  local ok, err = pcall(backend(kind)[method])
+  local asks = not was and (b.asks_first or {})[method]
+  if not slot().make_room(item, { hide = not asks }) then return nil, { code = "cancelled", message = "No room for the native session" } end
+  local ok, err = pcall(b[method])
   if not ok then return nil, { code = "unavailable", message = tostring(err) } end
   return M.session(kind)
 end

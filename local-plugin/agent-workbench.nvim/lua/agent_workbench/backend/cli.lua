@@ -34,6 +34,11 @@ M._terminal_command = terminal_command
 function M.new(kind)
   local backend, session = {}, nil
   assert(require("agent_workbench.options").get().native[kind])
+  if kind == "antigravity" then backend.asks_first = { resume = true } end
+  local function agent_label()
+    local agent = require("agent_workbench.state").agents[kind]
+    return agent and agent.label or kind
+  end
   function backend.running() return terminals.alive(session) end
   function backend.buf() return backend.running() and session.buf or nil end
   function backend.window() return terminals.window(session) end
@@ -49,7 +54,7 @@ function M.new(kind)
     if ok then session = nil end
     return ok, err
   end
-  local function open(extra)
+  local function open(extra, explicit_root)
     if not backend.running() then
       local config = require("agent_workbench.options").get()
       local native = assert(config.native[kind])
@@ -59,7 +64,7 @@ function M.new(kind)
       end
       vim.list_extend(argv, extra or {})
       local env = terminal_env()
-      local root = require("agent_workbench.context").project_root(vim.api.nvim_buf_get_name(0))
+      local root = explicit_root or require("agent_workbench.context").project_root(vim.api.nvim_buf_get_name(0))
       session = terminals.open(kind, {
         argv = terminal_command(kind, argv, env),
         cwd = root,
@@ -82,13 +87,65 @@ function M.new(kind)
     vim.api.nvim_set_current_win(win)
     vim.cmd.startinsert()
   end
-  backend.reveal = open
-  backend.focus = open
+  backend.reveal = function() open() end
+  backend.focus = function() open() end
   function backend.continue()
+    if backend.running() then
+      open()
+      vim.notify(("%s is already running: this is its session"):format(agent_label()),
+        vim.log.levels.INFO, { title = "AI" })
+      return
+    end
     open({ "--continue" })
   end
-  function backend.resume()
+  function backend.resume(opts)
+    if backend.running() then
+      open()
+      local label = agent_label()
+      local article = label:match("^[AEIOUaeiou]") and "An" or "A"
+      vim.notify(("%s %s session is already active; exit it before resuming another"):format(article, label),
+        vim.log.levels.INFO, { title = "AI" })
+      return
+    end
     if kind == "kimi" then return open({ "--session" }) end
+    if kind == "antigravity" then
+      opts = opts or {}
+      local root = require("agent_workbench.context").project_root(vim.api.nvim_buf_get_name(0))
+      local agy = require("agent_workbench.backend.antigravity")
+      local sessions = agy.sessions(root)
+      local slot = require("agent_workbench.slot")
+      if #sessions == 0 then
+        slot.back_to(opts.back)
+        vim.notify(("No Antigravity sessions found for %s"):format(root), vim.log.levels.WARN, { title = "AI" })
+        return
+      end
+      local tab = vim.api.nvim_get_current_tabpage()
+      vim.ui.select(sessions, {
+        prompt = ("Resume Antigravity (%s)"):format(vim.fs.basename(root)),
+        kind = "ai_antigravity_resume",
+        format_item = agy.format_session,
+      }, function(choice)
+        if not choice then return slot.back_to(opts.back) end
+        local ok, err = xpcall(function()
+          if vim.api.nvim_tabpage_is_valid(tab) and vim.api.nvim_get_current_tabpage() ~= tab then
+            vim.api.nvim_set_current_tabpage(tab)
+          end
+          if backend.running() then
+            open()
+            vim.notify("An Antigravity session is already active; exit it before resuming another",
+              vim.log.levels.INFO, { title = "AI" })
+            return
+          end
+          if not slot.make_room(slot.native_item("antigravity")) then return end
+          open({ "--conversation", choice.id }, root)
+          if opts.on_started then opts.on_started() end
+        end, debug.traceback)
+        if not ok then
+          vim.notify(("Antigravity resume failed:\n%s"):format(err), vim.log.levels.ERROR, { title = "AI" })
+        end
+      end)
+      return
+    end
     open()
     vim.notify("Use the CLI's session picker in this terminal")
   end

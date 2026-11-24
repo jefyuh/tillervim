@@ -45,11 +45,11 @@ reconfigure. Session state and the selected HTTP profile are separate live state
 | `native.codex.args` | string list; `{ "--no-alt-screen", "--yolo" }` | Base argv, preserved for new/resume/continue. The host's existing execution policy is retained. |
 | `native.codex.wrap_tmux` | boolean; `true` | Frame composition/scrollback wrapper when tmux is installed. |
 | `native.codex.teardown_ignore` | string; shared daemon ERE | `awk` ERE of child daemon processes spared during tmux teardown. |
-| `native.antigravity.args` | string list; `{ "--settings", '{"altScreenMode":"always"}' }` | Session-only alternate-screen mode in `agy` for bounded viewport scrolling. |
+| `native.antigravity.args` | string list; `{ "--settings", '{"altScreenMode":"always","pickerGrouping":"grouped"}' }` | Session-only alternate-screen mode and workspace-grouped `/resume` in `agy`. |
 | `native.antigravity.wrap_tmux` | boolean; `true` | Offscreen DEC 2026 frame composition wrapper when `tmux` is installed (leaves mouse wheel passthrough intact in `altScreenMode`). |
 | `terminal.provider` | `"native"`, `"snacks"`, provider table; `"native"` | PTY/view owner. |
 | `panel.width` | positive integer; `90` | Native/chat panel width in columns. |
-| `plugin_dirs` | ordered string list; `{}` | Local plugins for native Codex and Antigravity terminals, staged at launch. Codex shares its plugin cache. Antigravity uses a temporary plugin workspace. |
+| `plugin_dirs` | ordered string list; `{}` | Local plugins for native Codex and Antigravity terminals, staged at launch into deterministic cache workspaces. |
 | `integrations.companion` | boolean; `false` | Enable the optional CodeCompanion chat/inline integration. The host installs/configures CodeCompanion. |
 | `integrations.review` | boolean; `false` | Enable prompt hooks and review events. The host supplies git-review.nvim and CodeDiff. |
 | `key_profile` | string; `"auto"` | Startup HTTP profile (`"auto"` or a configured `api` profile name). |

@@ -7,7 +7,7 @@ local defaults = {
   panel = { width = 90 },
   terminal = { provider = "native" },
   native = { codex = { command = "codex", args = { "--no-alt-screen", "--yolo" }, wrap_tmux = true, teardown_ignore = DEFAULT_TEARDOWN_IGNORE },
-    antigravity = { command = "agy", args = { "--settings", '{"altScreenMode":"always"}' }, wrap_tmux = true }, kimi = { command = "kimi", args = {} },
+    antigravity = { command = "agy", args = { "--settings", '{"altScreenMode":"always","pickerGrouping":"grouped"}' }, wrap_tmux = true }, kimi = { command = "kimi", args = {} },
     opencode = { command = "opencode", args = {} } },
   integrations = { companion = false, review = false },
   plugin_dirs = {},

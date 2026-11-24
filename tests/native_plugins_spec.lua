@@ -63,6 +63,13 @@ if vim.fn.executable("agy") == 1 then
     t.ok(result.code == 0 and vim.json.decode(result.stdout).components.skills == 1,
       "agy validates the staged " .. name .. " skill without launching an agent")
   end
+  write(agy_package .. "/skills/example/SKILL.md", "---\nname: example\ndescription: Example skill\n---\nUpdated skill.")
+  local second = plugins.antigravity_args("agy")
+  t.eq(second, args, "Antigravity reuses a deterministic plugin workspace path across launches")
+  local staged_skill = args[2] .. "/.agents/plugins/demo/skills/example/SKILL.md"
+  t.ok(table.concat(vim.fn.readfile(staged_skill), "\n"):find("Updated skill.", 1, true) ~= nil,
+    "Antigravity refreshes local plugin edits in place")
+  vim.fn.delete(vim.fs.dirname(args[2]), "rf")
 end
 local dirs = { bundle, compat }
 set_dirs({ root .. "/missing" })

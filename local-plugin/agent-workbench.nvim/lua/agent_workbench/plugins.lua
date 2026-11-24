@@ -81,15 +81,22 @@ function M.claude_args()
   return args
 end
 
----Agy discovers workspace plugins under .agents/plugins. Stage each launch
----in Nvim's temporary directory so conversion and installation stay local to
----the terminal. Only the plugin installer gets the disposable home.
+---Agy discovers workspace plugins under .agents/plugins. Stage into a stable
+---cache path keyed by the configured plugin list so every launch in a project
+---shares the same workspace URI (preserving /resume workspace grouping and
+---preventing dangling temp paths), while refreshing local edits per spawn.
+---Only the plugin installer gets the disposable home.
 function M.antigravity_args(command)
   local plugins = M.resolve("antigravity")
   if #plugins == 0 then return {} end
-  local root = vim.fn.tempname()
-  local installer = root .. "/installer"
+  local identity = {}
+  for _, plugin in ipairs(plugins) do identity[#identity + 1] = { plugin.name, plugin.path } end
+  local key = "agy-" .. vim.fn.sha256(vim.json.encode(identity)):sub(1, 12)
+  local root = vim.fn.stdpath("cache") .. "/ai-plugins/" .. key
+  local installer = root .. "/installer-" .. vim.fn.getpid()
   local workspace = root .. "/workspace"
+  local target = workspace .. "/.agents/plugins"
+  vim.fn.delete(installer, "rf")
   local ok, err = pcall(function()
     assert(vim.fn.mkdir(installer, "p") == 1)
     assert(vim.fn.mkdir(workspace .. "/.agents", "p") == 1)
@@ -106,13 +113,20 @@ function M.antigravity_args(command)
         if line:find("⚠", 1, true) then vim.notify("agy: " .. vim.trim(line), vim.log.levels.WARN) end
       end
     end
-    assert(vim.uv.fs_rename(installed, workspace .. "/.agents/plugins"))
+    local prev = workspace .. "/.agents/plugins-old-" .. vim.fn.getpid()
+    vim.fn.delete(prev, "rf")
+    if vim.fn.isdirectory(target) == 1 then
+      assert(vim.uv.fs_rename(target, prev))
+    end
+    local renamed, rename_err = vim.uv.fs_rename(installed, target)
+    if not renamed then
+      if vim.fn.isdirectory(prev) == 1 then pcall(vim.uv.fs_rename, prev, target) end
+      fail("cannot update staged Antigravity plugins: " .. tostring(rename_err))
+    end
+    vim.fn.delete(prev, "rf")
   end)
   vim.fn.delete(installer, "rf")
-  if not ok then
-    vim.fn.delete(root, "rf")
-    error(err, 0)
-  end
+  if not ok then error(err, 0) end
   return { "--add-dir", workspace }
 end
 
