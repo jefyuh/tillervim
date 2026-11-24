@@ -25,10 +25,11 @@ local ok, err = xpcall(function()
     '    ["<C-v>"] = false, ["<C-s>"] = false,',
     '    ["<C-y>"] = { callback = function() require("aerial").select({ split = "v" }) end, desc = "Open in vertical split" },',
     '  } } },',
-    '  { "folke/snacks.nvim", opts = { picker = { win = { input = { keys = {',
+    '  { "folke/snacks.nvim", opts = { image = { math = { enabled = true } }, picker = { win = { input = { keys = {',
     '    ["<c-v>"] = false, ["<c-s>"] = false, ["<M-p>"] = false,',
     '    ["<C-y>"] = { "edit_vsplit", mode = { "n", "i" }, desc = "Open in vertical split" },',
     '  } } } } } },',
+    '  { "MeanderingProgrammer/render-markdown.nvim", opts = { html = { comment = { conceal = true, text = "NOTE" } } } },',
     '  { "milanglacier/minuet-ai.nvim", opts = { debounce = 321, virtualtext = { keymap = { accept = "<C-o>" } } } },',
     '  { "git-review.nvim", opts = { history_limit = 17, max_file_size = 123456 } },',
     '  { "monaqa/dial.nvim", keys = function(_, keys)',
@@ -131,7 +132,18 @@ local ok, err = xpcall(function()
   local relabelled = vim.fn.maparg('<leader>aE', 'n', false, true)
   check(relabelled.callback == inline.callback and relabelled.expr == 1, 'billing relabel retains user mapping behavior')
   check(relabelled.desc:find('Personal billing', 1, true) and vim.fn.maparg('<leader>ae', 'n') == '', 'billing switch relabels remap without resurrecting old key')
-  require('lazy').load({ plugins = { 'minuet-ai.nvim', 'git-review.nvim' } })
+  require('lazy').load({ plugins = { 'minuet-ai.nvim', 'git-review.nvim', 'render-markdown.nvim' } })
+  check(Snacks.image.config.enabled == true and Snacks.image.config.math.enabled == true,
+    'Snacks image.math user override merges on top of distribution defaults')
+  local gh_buf = api.nvim_create_buf(false, true)
+  vim.bo[gh_buf].filetype = 'markdown.gh'
+  local md_buf = api.nvim_create_buf(false, true)
+  vim.bo[md_buf].filetype = 'markdown'
+  local rm_state = require('render-markdown.state')
+  check(rm_state.get(md_buf).html.comment.conceal == true and rm_state.get(md_buf).html.comment.text == 'NOTE',
+    'render-markdown html.comment user override replaces the distribution default')
+  check(rm_state.get(gh_buf).bullet.enabled == false,
+    'render-markdown user override preserves distribution markdown.gh overrides')
   check(require('minuet').config.debounce == 321 and require('minuet').config.virtualtext.keymap.accept == '<C-o>', 'Minuet receives native user opts')
   check(require('git_review').options().history_limit == 17 and require('git_review').options().max_file_size == 123456, 'Git overrides are not replaced by distribution defaults')
   check(not require('llama_service').ready(), 'headless native overrides load no model')

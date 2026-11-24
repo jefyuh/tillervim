@@ -11,6 +11,9 @@ return {
       ft = { "markdown", "markdown.gh", "codecompanion" } },
   },
   opts = {
+    -- Keep <!-- ... --> notes visible in rendered documents and templates;
+    -- users may re-enable concealing in their own render-markdown.nvim opts.
+    html = { comment = { conceal = false } },
     -- FileType attaches before Snacks requests its first render. Keep its GitHub view settings.
     overrides = { filetype = { ["markdown.gh"] = { render_modes = true, bullet = { enabled = false } } } },
   },

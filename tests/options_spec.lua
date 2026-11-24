@@ -140,6 +140,38 @@ t.eq(vim.wo.conceallevel, 2, "any other revision keeps the global level")
 t.eq(vim.opt.fillchars:get().diff, "╱", "diff filler lines are drawn with ╱")
 t.eq(vim.go.fillchars:find("diff:╱", 1, true) ~= nil, true, "the global value carries it")
 
+-- Snacks keeps image viewing enabled while leaving LaTeX math as text, and
+-- render-markdown keeps HTML comments visible instead of blank lines.
+t.eq(Snacks.image.config.enabled, true, "Snacks image support stays enabled")
+t.eq(Snacks.image.config.math.enabled, false, "Snacks math image rendering stays off by default")
+vim.cmd.edit(vim.fn.fnameescape(file("math.md", {
+  "# Heading",
+  "Inline $M \\le 10$ and block:",
+  "",
+  "$$N = 3$$",
+  "<!-- template note -->",
+})))
+vim.api.nvim_win_set_cursor(0, { 1, 0 })
+local md_buf = vim.api.nvim_get_current_buf()
+local rm_state = require("render-markdown.state")
+t.eq(rm_state.get(md_buf).html.comment.conceal, false, "render-markdown keeps HTML comments visible by default")
+if pcall(vim.treesitter.language.add, "markdown") and pcall(vim.treesitter.language.add, "markdown_inline") then
+  if pcall(vim.treesitter.language.add, "html") then
+    local rm_ns = vim.api.nvim_get_namespaces()["render-markdown.nvim"]
+    t.ok(rm_ns ~= nil and vim.wait(1000, function()
+      return #vim.api.nvim_buf_get_extmarks(md_buf, rm_ns, { 0, 0 }, { 0, -1 }, {}) > 0
+    end, 10), "render-markdown renders the Markdown buffer")
+    t.eq(#vim.api.nvim_buf_get_extmarks(md_buf, rm_ns, { 4, 0 }, { 4, -1 }, {}), 0,
+      "away from the cursor, HTML comments receive no conceal mark")
+  end
+  if pcall(vim.treesitter.language.add, "latex") then
+    local found
+    Snacks.image.doc.find(md_buf, function(imgs) found = imgs end)
+    t.ok(vim.wait(1000, function() return found ~= nil end, 10), "Snacks doc image scan completes")
+    t.eq(#found, 0, "Markdown LaTeX formulas produce no Snacks image placements")
+  end
+end
+
 -- probe.lua and probe.tex may have started lua_ls / texlab.
 for _, client in ipairs(vim.lsp.get_clients()) do client:stop(true) end
 vim.wait(2000, function() return #vim.lsp.get_clients() == 0 end, 20)

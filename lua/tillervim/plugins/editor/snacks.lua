@@ -160,6 +160,9 @@ return {
     local opts = {
     image = {
       enabled = true,
+      -- Keep ordinary image previews while leaving $...$/$$...$$ as text instead
+      -- of compiling formulas through pdflatex into oversized inline graphics.
+      math = { enabled = false },
     },
     -- Only with a UI attached. Enabled, it takes over vim.notify as soon as
     -- snacks is set up, and in --headless that would swallow every warning
